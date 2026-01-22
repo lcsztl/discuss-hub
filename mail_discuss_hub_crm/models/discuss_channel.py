@@ -23,7 +23,11 @@ class DiscussChannel(models.Model):
 
     def action_get_discuss_lead_panel_data(self):
         self.ensure_one()
-        can_create = self.env.user.has_group("crm.group_crm_user")
+        # Check if user can create leads - try group first, fallback to model access
+        can_create = (
+            self.env.user.has_group("crm.group_crm_user")
+            or self.env["crm.lead"].check_access_rights("create", raise_exception=False)
+        )
         try:
             leads = self.lead_ids.read(["id", "name"]) if self.lead_ids else []
         except AccessError:
@@ -41,7 +45,11 @@ class DiscussChannel(models.Model):
 
     def action_create_discuss_lead(self, values):
         self.ensure_one()
-        if not self.env.user.has_group("crm.group_crm_user"):
+        # Check if user can create leads
+        if not (
+            self.env.user.has_group("crm.group_crm_user")
+            or self.env["crm.lead"].check_access_rights("create", raise_exception=False)
+        ):
             raise AccessError(_("You do not have access to create CRM leads."))
 
         name = (values or {}).get("name") or ""
@@ -54,6 +62,14 @@ class DiscussChannel(models.Model):
         if not team and self.discuss_team_id and self.discuss_team_id.crm_team_id:
             team = self.discuss_team_id.crm_team_id
 
+        # Get partner from channel members (exclude current user)
+        partner = False
+        channel_partners = self.channel_member_ids.mapped("partner_id").filtered(
+            lambda p: p.id != self.env.user.partner_id.id
+        )
+        if channel_partners:
+            partner = channel_partners[0]  # Take the first non-user partner
+
         lead_vals = {
             "name": name,
             "team_id": team.id if team else False,
@@ -61,6 +77,8 @@ class DiscussChannel(models.Model):
             "description": self._prepare_discuss_lead_description(),
             "referred": self.env.user.partner_id.name,
         }
+        if partner:
+            lead_vals["partner_id"] = partner.id
         lead = self.env["crm.lead"].create(lead_vals)
         self.lead_ids = [(4, lead.id)]
         return {"id": lead.id, "name": lead.name}

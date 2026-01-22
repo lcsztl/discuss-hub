@@ -13,7 +13,7 @@
                             <ul class="list-unstyled mb-0">
                                 <li t-foreach="state.leads" t-as="lead" t-key="lead.id">
                                     <button class="btn btn-link p-0 text-start"
-                                            t-on-click="() => openLead(lead.id)">
+                                            t-on-click="() => this.openLead(lead.id)">
                                         <t t-esc="lead.name"/>
                                     </button>
                                 </li>
