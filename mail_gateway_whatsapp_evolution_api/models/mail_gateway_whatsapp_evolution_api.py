@@ -241,6 +241,7 @@ class MailGatewayWhatsappEvolutionApi(models.AbstractModel):
             decoded = self._decode_base64_payload(payload_base64)
             if decoded:
                 filename = filename or self._get_attachment_name(message, key, data)
+                filename = self._normalize_media_filename(filename, mimetype, key)
                 attachments.append(
                     {
                         "name": filename,
@@ -491,6 +492,19 @@ class MailGatewayWhatsappEvolutionApi(models.AbstractModel):
         if message.get(key, {}).get("fileName"):
             return message.get(key, {}).get("fileName")
         return f"{key}.bin"
+
+    @staticmethod
+    def _normalize_media_filename(filename, mimetype, key):
+        name = (filename or "").strip()
+        if not name:
+            name = key
+        extension = mimetypes.guess_extension(mimetype or "")
+        if extension:
+            if name.endswith(".bin"):
+                name = f"{name[:-4]}{extension}"
+            elif "." not in name:
+                name = f"{name}{extension}"
+        return name
 
     def _get_chat_token(self, data):
         remote_jid, remote_jid_alt, participant_jid = self._extract_jids(data)
