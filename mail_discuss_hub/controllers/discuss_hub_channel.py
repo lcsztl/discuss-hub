@@ -22,6 +22,9 @@ class DiscussHubChannelController(http.Controller):
         domain = []
         if channel_types:
             domain.append(("channel_type", "in", channel_types))
+        # Avoid returning sub-channels as top-level threads in the sidebar.
+        # They should be fetched via the parent channel and rendered grouped.
+        domain.append(("parent_channel_id", "=", False))
         if known_channel_ids:
             domain.append(("id", "not in", known_channel_ids))
         channels = request.env["discuss.channel"].search(

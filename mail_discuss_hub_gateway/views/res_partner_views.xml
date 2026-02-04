@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="mail_discuss_hub_gateway_partner_form_gateway_fields" model="ir.ui.view">
+        <field name="name">res.partner.form.gateway.fields</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='phone']" position="after">
+                <field name="gateway_token" />
+            </xpath>
+        </field>
+    </record>
+
+    <record id="mail_discuss_hub_gateway_partner_tree_gateway_fields" model="ir.ui.view">
+        <field name="name">res.partner.tree.gateway.fields</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_tree" />
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="inside">
+                <field name="gateway_token" />
+            </xpath>
+        </field>
+    </record>
+</odoo>

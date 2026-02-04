@@ -13,6 +13,7 @@
         "security/mail_discuss_hub_gateway_security.xml",
         "views/discuss_channel_views.xml",
         "views/mail_gateway_views.xml",
+        "views/res_partner_views.xml",
         "views/discuss_inbox_views.xml",
     ],
     "assets": {

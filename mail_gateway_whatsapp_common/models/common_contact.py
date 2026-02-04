@@ -163,7 +163,86 @@ class MailGatewayWhatsappCommonContact:
         if dto.from_me:
             user = gateway.webhook_user_id or self.env.user
             return user.partner_id if user else False
+        partner = self._find_partner_for_inbound(gateway, dto)
+        if partner:
+            return partner
         return self._get_or_create_guest(gateway, dto)
+
+
+    def _find_partner_for_inbound(self, gateway, dto):
+        token_candidates = self._get_guest_token_candidates(dto)
+        phone = self._get_guest_phone(dto, token_candidates=token_candidates)
+        partner = self._find_partner_by_gateway_channel(gateway, phone)
+        if partner:
+            return partner
+        partner = self._find_partner_by_partner_fields(phone, token_candidates)
+        if partner:
+            return partner
+        if phone:
+            partner = self._find_partner_by_normalized_phone(phone)
+            if partner:
+                return partner
+        return False
+
+
+    def _find_partner_by_gateway_channel(self, gateway, phone):
+        if not gateway or not phone:
+            return False
+        channel_model = self.env["res.partner.gateway.channel"].sudo()
+        if "gateway_token" not in channel_model._fields:
+            return False
+        record = channel_model.search(
+            [("gateway_id", "=", gateway.id), ("gateway_token", "=", phone)],
+            limit=1,
+        )
+        return record.partner_id if record else False
+
+
+    def _find_partner_by_partner_fields(self, phone, token_candidates):
+        partner_model = self.env["res.partner"].sudo()
+        tokens = []
+        for token in token_candidates or []:
+            token = (token or "").strip()
+            if token:
+                tokens.append(token)
+        if phone and phone not in tokens:
+            tokens.insert(0, phone)
+        if tokens and "gateway_token" in partner_model._fields:
+            partner = partner_model.search([("gateway_token", "in", tokens)], limit=1)
+            if partner:
+                return partner
+        if phone and "gateway_phone" in partner_model._fields:
+            partner = partner_model.search([("gateway_phone", "=", phone)], limit=1)
+            if partner:
+                return partner
+        return False
+
+
+    def _find_partner_by_normalized_phone(self, phone):
+        if not phone:
+            return False
+        partner_model = self.env["res.partner"].sudo()
+        if "phone" not in partner_model._fields and "mobile" not in partner_model._fields:
+            return False
+        try:
+            self.env.cr.execute(
+                """
+                SELECT id
+                FROM res_partner
+                WHERE regexp_replace(COALESCE(phone,''), '\\D', '', 'g') = %s
+                   OR regexp_replace(COALESCE(mobile,''), '\\D', '', 'g') = %s
+                ORDER BY id
+                LIMIT 1
+                """,
+                (phone, phone),
+            )
+            row = self.env.cr.fetchone()
+        except Exception:
+            self._logger.debug(
+                "Failed to search partner by normalized phone.", exc_info=True
+            )
+            return False
+        return partner_model.browse(row[0]) if row else False
 
 
     def _get_or_create_guest(self, gateway, dto):

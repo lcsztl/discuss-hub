@@ -36,5 +36,10 @@ _COMMON_MIXINS = (
 
 for _mixin in _COMMON_MIXINS:
     for _name, _value in _mixin.__dict__.items():
-        if _name.startswith("_") and callable(_value):
+        if not _name.startswith("_"):
+            continue
+        if isinstance(_value, (staticmethod, classmethod)):
+            setattr(MailGatewayWhatsappCommon, _name, _value)
+            continue
+        if callable(_value):
             setattr(MailGatewayWhatsappCommon, _name, _value)
