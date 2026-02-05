@@ -9,11 +9,19 @@ export const contactSidebarService = {
             selection: null,
             requestId: 0,
         });
+        const openers = new Set();
         return {
             state,
+            register(opener) {
+                openers.add(opener);
+                return () => openers.delete(opener);
+            },
             open(selection) {
                 state.selection = selection;
                 state.requestId += 1;
+                for (const opener of openers) {
+                    opener();
+                }
             },
             clear() {
                 state.selection = null;
