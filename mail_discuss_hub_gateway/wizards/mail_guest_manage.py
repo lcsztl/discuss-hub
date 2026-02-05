@@ -11,8 +11,24 @@ _logger = logging.getLogger(__name__)
 class MailGuestManage(models.TransientModel):
     _inherit = "mail.guest.manage"
 
+    def _get_partner_vals(self):
+        vals = super()._get_partner_vals()
+        guest = self.guest_id
+        partner_model = self.env["res.partner"]
+        if (
+            "gateway_phone" in partner_model._fields
+            and guest.gateway_phone
+            and not vals.get("gateway_phone")
+        ):
+            vals["gateway_phone"] = guest.gateway_phone
+        if "tag_ids" in guest._fields and guest.tag_ids:
+            vals["category_id"] = [(6, 0, guest.tag_ids.ids)]
+        return vals
+
     def _merge_partner(self, partner):
         self._sync_gateway_channels(partner)
+        self._apply_guest_tags(partner)
+        self._apply_gateway_phone(partner)
         for member in self.env["discuss.channel.member"].search(
             [("guest_id", "=", self.guest_id.id)]
         ):
@@ -43,6 +59,27 @@ class MailGuestManage(models.TransientModel):
             )
             if channels:
                 channels._bus_send_store(store)
+
+    def _apply_guest_tags(self, partner):
+        guest = self.guest_id
+        if "category_id" not in partner._fields:
+            return
+        if "tag_ids" not in guest._fields or not guest.tag_ids:
+            return
+        existing = set(partner.category_id.ids)
+        desired = set(guest.tag_ids.ids)
+        if desired.issubset(existing):
+            return
+        partner.category_id = [(6, 0, sorted(existing | desired))]
+
+    def _apply_gateway_phone(self, partner):
+        guest = self.guest_id
+        if (
+            "gateway_phone" in partner._fields
+            and guest.gateway_phone
+            and not partner.gateway_phone
+        ):
+            partner.gateway_phone = guest.gateway_phone
 
     def _sync_gateway_channels(self, partner):
         guest = self.guest_id

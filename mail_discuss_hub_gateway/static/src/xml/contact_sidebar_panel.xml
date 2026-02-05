@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="mail_discuss_hub_gateway.ContactSidebarPanel">
+        <ActionPanel title.translate="Contato" icon="'fa fa-address-card-o'">
+            <t t-if="state.loading">
+                <div class="py-2 text-muted">Carregando...</div>
+            </t>
+            <t t-elif="!hasSelection">
+                <div class="py-2 text-muted">Selecione uma mensagem para ver o contato.</div>
+            </t>
+            <t t-else="">
+                <div t-if="state.guest" class="mb-3">
+                    <div class="fw-bold text-uppercase text-muted small mb-1">Visitante</div>
+                    <div class="mb-1"><span class="fw-bold">Nome:</span> <t t-esc="state.guest.name"/></div>
+                    <div class="mb-1"><span class="fw-bold">Telefone:</span> <t t-esc="state.guest.gateway_phone || '-'"/></div>
+                    <div t-if="state.guest.tags?.length" class="d-flex flex-wrap gap-1 mt-1">
+                        <t t-foreach="state.guest.tags" t-as="tag" t-key="tag.id">
+                            <span class="badge rounded-pill bg-secondary" t-esc="tag.name"/>
+                        </t>
+                    </div>
+                    <div t-if="showGuestActions" class="d-flex flex-wrap gap-2 mt-2">
+                        <button class="btn btn-primary btn-sm" t-on-click="createPartner">Criar contato</button>
+                        <button class="btn btn-secondary btn-sm" t-on-click="linkPartner">Vincular contato</button>
+                    </div>
+                </div>
+
+                <div t-if="state.partner">
+                    <div class="fw-bold text-uppercase text-muted small mb-1">Contato</div>
+                    <div class="mb-1"><span class="fw-bold">Nome:</span> <t t-esc="state.partner.name"/></div>
+                    <div class="mb-1"><span class="fw-bold">Telefone:</span> <t t-esc="state.partner.phone || '-'"/></div>
+                    <div class="mb-1"><span class="fw-bold">Celular:</span> <t t-esc="state.partner.mobile || '-'"/></div>
+                    <div class="mb-1"><span class="fw-bold">Email:</span> <t t-esc="state.partner.email || '-'"/></div>
+                    <div class="mb-1">
+                        <span class="fw-bold">Gateway phone:</span>
+                        <t t-esc="state.partner.gateway_phone || '-'"/>
+                    </div>
+                    <div t-if="state.partner.categories?.length" class="d-flex flex-wrap gap-1 mt-1">
+                        <t t-foreach="state.partner.categories" t-as="cat" t-key="cat.id">
+                            <span class="badge rounded-pill bg-info text-dark" t-esc="cat.name"/>
+                        </t>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button class="btn btn-secondary btn-sm" t-on-click="openPartner">Abrir contato</button>
+                    </div>
+                </div>
+            </t>
+        </ActionPanel>
+    </t>
+</templates>

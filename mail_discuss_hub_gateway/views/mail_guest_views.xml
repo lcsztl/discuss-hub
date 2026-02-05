@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="mail_discuss_hub_gateway_guest_form_tags" model="ir.ui.view">
+        <field name="name">mail.guest.view.form.tags</field>
+        <field name="model">mail.guest</field>
+        <field name="inherit_id" ref="mail.mail_guest_view_form"/>
+        <field name="arch" type="xml">
+            <field name="name" position="after">
+                <field name="tag_ids" widget="many2many_tags" />
+            </field>
+        </field>
+    </record>
+</odoo>

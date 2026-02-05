@@ -300,6 +300,11 @@ class MailGatewayWhatsappCommonContact:
                 (dto.sender_jid or "").strip(),
             ]
             tokens = [token for token in candidates if token]
+            non_group_tokens = [
+                token for token in tokens if not token.endswith("@g.us")
+            ]
+            if non_group_tokens:
+                tokens = non_group_tokens
             has_phone_jid = any(
                 token.endswith("@s.whatsapp.net") or token.endswith("@c.us")
                 for token in tokens

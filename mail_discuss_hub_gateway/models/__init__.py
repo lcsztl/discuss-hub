@@ -6,3 +6,5 @@ from . import ir_rule
 from . import mail_gateway
 from . import mail_gateway_abstract
 from . import mail_notification
+from . import mail_guest
+from . import res_partner

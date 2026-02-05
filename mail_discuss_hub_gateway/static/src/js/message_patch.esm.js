@@ -25,10 +25,10 @@ patch(Message.prototype, {
     },
     getAuthorText() {
         if (this._isGatewayGuestAuthor()) {
-            return _t("Create partner");
+            return _t("Ver contato");
         }
         if (this._isGatewayPartnerAuthor() && !this.message.author?.userId) {
-            return _t("Open contact");
+            return _t("Ver contato");
         }
         return super.getAuthorText();
     },
@@ -36,6 +36,9 @@ patch(Message.prototype, {
         if (this._isGatewayGuestAuthor()) {
             markEventHandled(ev, "Message.ClickAuthor");
             ev.stopPropagation();
+            if (this._openGatewayContactSidebar()) {
+                return true;
+            }
             return this.env.services.action.doAction({
                 name: _t("Manage guest"),
                 type: "ir.actions.act_window",
@@ -47,6 +50,9 @@ patch(Message.prototype, {
         }
         if (this._isGatewayPartnerAuthor() && !this.message.author?.userId) {
             markEventHandled(ev, "Message.ClickAuthor");
+            if (this._openGatewayContactSidebar()) {
+                return true;
+            }
             return this.env.services.action.doAction({
                 type: "ir.actions.act_window",
                 res_model: "res.partner",
@@ -56,5 +62,19 @@ patch(Message.prototype, {
             });
         }
         return super.onClickAuthor(ev);
+    },
+    _openGatewayContactSidebar() {
+        const contactSidebar = this.env.services["discuss_hub.contact_sidebar"];
+        const thread = this.message.thread;
+        if (!contactSidebar || !thread || !this.message.author?.id) {
+            return false;
+        }
+        contactSidebar.open({
+            threadId: thread.id,
+            threadModel: thread.model,
+            authorType: this.message.author.type,
+            authorId: this.message.author.id,
+        });
+        return true;
     },
 });

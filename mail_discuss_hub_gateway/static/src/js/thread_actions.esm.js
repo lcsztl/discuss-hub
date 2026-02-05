@@ -2,6 +2,7 @@
 
 import { threadActionsRegistry } from "@mail/core/common/thread_actions";
 import { GatewayTransferPanel } from "./gateway_transfer_panel.esm";
+import { ContactSidebarPanel } from "./contact_sidebar_panel.esm";
 import { _t } from "@web/core/l10n/translation";
 import { usePopover } from "@web/core/popover/popover_hook";
 import { useComponent } from "@odoo/owl";
@@ -74,6 +75,27 @@ threadActionsRegistry
             action.popover?.close();
         },
         sequence: 12,
+        sequenceGroup: 20,
+        toggle: true,
+    })
+    .add("gateway-contact-sidebar", {
+        condition(component) {
+            const thread = component.thread;
+            return (
+                thread?.model === "discuss.channel" &&
+                thread.channel_type === "gateway" &&
+                (!component.props.chatWindow || component.props.chatWindow.isOpen)
+            );
+        },
+        component: ContactSidebarPanel,
+        componentProps(action, component) {
+            return { thread: component.thread };
+        },
+        icon: "fa fa-fw fa-address-card-o",
+        iconLarge: "fa fa-fw fa-lg fa-address-card-o",
+        name: _t("Contato"),
+        panelOuterClass: "o-discuss-ContactSidebar bg-inherit",
+        sequence: 15,
         sequenceGroup: 20,
         toggle: true,
     })
