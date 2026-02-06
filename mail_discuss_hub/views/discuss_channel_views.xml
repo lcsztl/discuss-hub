@@ -5,6 +5,13 @@
         <field name="model">discuss.channel</field>
         <field name="inherit_id" ref="mail.discuss_channel_view_form"/>
         <field name="arch" type="xml">
+            <xpath expr="//group[@class='o_label_nowrap']/field[@name='description']" position="after">
+                <field
+                    name="discuss_hub_tag_ids"
+                    widget="many2many_tags"
+                    readonly="not is_editable"
+                />
+            </xpath>
             <xpath expr="//page[@name='privacy']//field[@name='group_public_id']" position="attributes">
                 <attribute name="invisible">channel_type != 'channel' or parent_channel_id</attribute>
             </xpath>

@@ -12,25 +12,59 @@ function isThreadArchived(thread) {
     return thread?.active === false;
 }
 
-function applyDiscussHubSidebarFilter(threads, activeFilter) {
-    const visibleThreads = threads.filter((thread) => !isThreadArchived(thread));
-    if (activeFilter === "all") {
-        return visibleThreads;
+function applyDiscussHubSidebarTagFilter(threads, activeTagIds) {
+    if (!activeTagIds?.length) {
+        return threads;
     }
-    const providers = discussHubSidebarFilterRegistry.getAll();
-    if (!providers.length) {
-        return visibleThreads;
-    }
-    const filterKey = activeFilter === "unassigned" ? "isUnassigned" : "isMine";
-    return visibleThreads.filter((thread) => {
-        const matchingProviders = providers.filter(
-            (provider) => provider.appliesTo && provider.appliesTo(thread)
-        );
-        if (!matchingProviders.length) {
-            return true;
+    const tagSet = new Set(activeTagIds);
+    return threads.filter((thread) => {
+        const threadTagIds = thread?.discuss_hub_tag_ids;
+        if (!threadTagIds) {
+            return false;
         }
-        return matchingProviders.some((provider) => provider[filterKey]?.(thread));
+        if (Array.isArray(threadTagIds)) {
+            return threadTagIds.some((id) => tagSet.has(id));
+        }
+        if (threadTagIds instanceof Set) {
+            for (const id of threadTagIds) {
+                if (tagSet.has(id)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        // Best-effort support for iterable values (unlikely, but keeps this resilient).
+        if (typeof threadTagIds === "object" && Symbol.iterator in threadTagIds) {
+            for (const id of threadTagIds) {
+                if (tagSet.has(id)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
     });
+}
+
+function applyDiscussHubSidebarFilter(threads, activeFilter, activeTagIds) {
+    const visibleThreads = threads.filter((thread) => !isThreadArchived(thread));
+    let result = visibleThreads;
+    if (activeFilter !== "all") {
+        const providers = discussHubSidebarFilterRegistry.getAll();
+        if (providers.length) {
+            const filterKey = activeFilter === "unassigned" ? "isUnassigned" : "isMine";
+            result = result.filter((thread) => {
+                const matchingProviders = providers.filter(
+                    (provider) => provider.appliesTo && provider.appliesTo(thread)
+                );
+                if (!matchingProviders.length) {
+                    return true;
+                }
+                return matchingProviders.some((provider) => provider[filterKey]?.(thread));
+            });
+        }
+    }
+    return applyDiscussHubSidebarTagFilter(result, activeTagIds);
 }
 
 patch(Thread.prototype, {
@@ -38,6 +72,11 @@ patch(Thread.prototype, {
         super.setup(...arguments);
         if (!("active" in this)) {
             this.active = Record.attr(true);
+        }
+        if (!("discuss_hub_tag_ids" in this)) {
+            // Keep it as a primitive list of ids so the store doesn't require a
+            // JS-side relational model definition.
+            this.discuss_hub_tag_ids = Record.attr([]);
         }
     },
     _computeDiscussAppCategory() {
@@ -51,9 +90,10 @@ patch(Thread.prototype, {
 patch(DiscussSidebarCategories.prototype, {
     filteredThreads(threads) {
         const activeFilter = this.store.discuss.discussHubSidebarFilter || "mine";
+        const activeTagIds = this.store.discuss.discussHubSidebarTagIds || [];
         if (activeFilter === "mine") {
             const baseThreads = super.filteredThreads(threads);
-            return applyDiscussHubSidebarFilter(baseThreads, activeFilter);
+            return applyDiscussHubSidebarFilter(baseThreads, activeFilter, activeTagIds);
         }
         const providers = discussHubSidebarFilterRegistry.getAll();
         const searchTerm = this.state.quickSearchVal
@@ -71,7 +111,7 @@ patch(DiscussSidebarCategories.prototype, {
             }
             return true;
         });
-        return applyDiscussHubSidebarFilter(baseThreads, activeFilter);
+        return applyDiscussHubSidebarFilter(baseThreads, activeFilter, activeTagIds);
     },
 });
 

@@ -18,6 +18,7 @@
         "views/discuss_hub_inbox_views.xml",
         "views/res_config_settings_views.xml",
         "views/discuss_channel_views.xml",
+        "views/discuss_hub_tag_views.xml",
         "views/res_users_views.xml",
         "views/mail_discuss_team_views.xml",
         "views/mail_discuss_team_menus.xml",

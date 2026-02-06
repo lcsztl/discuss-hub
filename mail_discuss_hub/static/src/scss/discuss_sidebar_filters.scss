@@ -13,3 +13,25 @@
         z-index: 0 !important;
     }
 }
+
+.o-discuss-hub-sidebar-tags {
+    .o-discuss-hub-tag {
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        border-radius: 9999px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        line-height: 1;
+        padding: 0.35rem 0.6rem;
+        opacity: 0.75;
+        transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    .o-discuss-hub-tag:hover {
+        opacity: 0.95;
+        transform: translateY(-1px);
+    }
+
+    .o-discuss-hub-tag--active {
+        opacity: 1;
+    }
+}

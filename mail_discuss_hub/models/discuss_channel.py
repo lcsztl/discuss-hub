@@ -21,6 +21,14 @@ class DiscussChannel(models.Model):
         index=True,
     )
 
+    discuss_hub_tag_ids = fields.Many2many(
+        "mail.discuss.hub.tag",
+        "mail_discuss_hub_channel_tag_rel",
+        "channel_id",
+        "tag_id",
+        string="Tags",
+    )
+
     @api.constrains("group_public_id", "group_ids")
     def _constraint_group_id_channel(self):
         auto_subscribe_blocked = self.sudo().filtered(
@@ -34,4 +42,5 @@ class DiscussChannel(models.Model):
     def _channel_basic_info(self):
         info = super()._channel_basic_info()
         info["active"] = self.active
+        info["discuss_hub_tag_ids"] = self.discuss_hub_tag_ids.ids
         return info

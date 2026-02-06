@@ -2,3 +2,6 @@ id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_mail_discuss_team_manager,mail.discuss.team,model_mail_discuss_team,base.group_system,1,1,1,1
 access_discuss_hub_inbox_manager,discuss.hub.inbox,model_discuss_hub_inbox,base.group_system,1,1,1,1
 access_discuss_hub_inbox_discuss_manager,discuss.hub.inbox,model_discuss_hub_inbox,mail_discuss_hub.group_discuss_hub_manager,1,1,1,1
+access_mail_discuss_hub_tag_user,mail.discuss.hub.tag,model_mail_discuss_hub_tag,base.group_user,1,0,0,0
+access_mail_discuss_hub_tag_manager,mail.discuss.hub.tag,model_mail_discuss_hub_tag,mail_discuss_hub.group_discuss_hub_manager,1,1,1,1
+access_mail_discuss_hub_tag_system,mail.discuss.hub.tag,model_mail_discuss_hub_tag,base.group_system,1,1,1,1

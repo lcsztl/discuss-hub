@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        <record id="mail_discuss_hub_tag_view_form" model="ir.ui.view">
+            <field name="name">mail.discuss.hub.tag.form</field>
+            <field name="model">mail.discuss.hub.tag</field>
+            <field name="arch" type="xml">
+                <form string="Tags">
+                    <sheet>
+                        <div class="oe_title">
+                            <label for="name"/>
+                            <h1>
+                                <field name="name" placeholder="e.g. Financeiro"/>
+                            </h1>
+                        </div>
+                        <group>
+                            <group>
+                                <field name="color" required="True" widget="color_picker"/>
+                                <field name="active"/>
+                            </group>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="mail_discuss_hub_tag_view_tree" model="ir.ui.view">
+            <field name="name">mail.discuss.hub.tag.list</field>
+            <field name="model">mail.discuss.hub.tag</field>
+            <field name="arch" type="xml">
+                <list string="Tags" editable="bottom" sample="1">
+                    <field name="name"/>
+                    <field name="color" widget="color_picker"/>
+                    <field name="active" optional="hide"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="mail_discuss_hub_tag_action" model="ir.actions.act_window">
+            <field name="name">Tags</field>
+            <field name="res_model">mail.discuss.hub.tag</field>
+            <field name="view_mode">list,form</field>
+            <field name="view_id" ref="mail_discuss_hub_tag_view_tree"/>
+            <field name="context">{}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    Create Discuss tags
+                </p>
+                <p>
+                    Use tags to classify conversations and filter them in the Discuss sidebar.
+                </p>
+            </field>
+        </record>
+
+        <menuitem
+            id="mail_discuss_hub_tag_menu"
+            name="Tags"
+            parent="mail.menu_configuration"
+            action="mail_discuss_hub_tag_action"
+            sequence="40"
+            groups="base.group_system,mail_discuss_hub.group_discuss_hub_manager"
+        />
+    </data>
+</odoo>
+

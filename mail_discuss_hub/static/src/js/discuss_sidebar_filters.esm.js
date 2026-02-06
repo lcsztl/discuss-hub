@@ -12,6 +12,8 @@ patch(DiscussApp.prototype, {
     setup(env) {
         super.setup(env);
         this.discussHubSidebarFilter = Record.attr("mine");
+        // Client-side selection for the sidebar tags filter (list of tag ids).
+        this.discussHubSidebarTagIds = Record.attr([]);
     },
 });
 
@@ -20,15 +22,25 @@ export class DiscussHubSidebarFilters extends Component {
 
     setup() {
         this.store = useState(useService("mail.store"));
+        this.orm = useService("orm");
+        this.state = useState({
+            tags: [],
+            loadingTags: false,
+        });
         this.filterRegistry = registry.category("discuss_hub.sidebar_filters");
         this.loadingFilters = new Set();
         this.labels = {
             mine: _t("Minhas"),
             unassigned: _t("Nao atribuidas"),
             all: _t("Todas"),
+            tags: _t("Tags"),
+            clear: _t("Limpar"),
         };
         if (!this.store.discuss.discussHubSidebarFilter) {
             this.store.discuss.update({ discussHubSidebarFilter: "mine" });
+        }
+        if (!this.store.discuss.discussHubSidebarTagIds) {
+            this.store.discuss.update({ discussHubSidebarTagIds: [] });
         }
         useEffect(
             (activeFilter) => {
@@ -36,14 +48,57 @@ export class DiscussHubSidebarFilters extends Component {
             },
             () => [this.activeFilter]
         );
+        useEffect(
+            () => {
+                this.loadTags();
+            },
+            () => []
+        );
     }
 
     get activeFilter() {
         return this.store.discuss.discussHubSidebarFilter || "mine";
     }
 
+    get activeTagIds() {
+        return this.store.discuss.discussHubSidebarTagIds || [];
+    }
+
     setFilter(value) {
         this.store.discuss.update({ discussHubSidebarFilter: value });
+    }
+
+    toggleTag(tagId) {
+        const current = this.activeTagIds;
+        const next = current.includes(tagId)
+            ? current.filter((id) => id !== tagId)
+            : [...current, tagId];
+        this.store.discuss.update({ discussHubSidebarTagIds: next });
+    }
+
+    clearTags() {
+        this.store.discuss.update({ discussHubSidebarTagIds: [] });
+    }
+
+    async loadTags() {
+        if (this.state.loadingTags) {
+            return;
+        }
+        this.state.loadingTags = true;
+        try {
+            const tags = await this.orm.searchRead(
+                "mail.discuss.hub.tag",
+                [["active", "=", true]],
+                ["name", "color"]
+            );
+            tags.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+            this.state.tags = tags;
+        } catch {
+            // Non-blocking: keep filters usable even if tags cannot be loaded.
+            this.state.tags = [];
+        } finally {
+            this.state.loadingTags = false;
+        }
     }
 
     async loadAccessibleThreads(activeFilter) {

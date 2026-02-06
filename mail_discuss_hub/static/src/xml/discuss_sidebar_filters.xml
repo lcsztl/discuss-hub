@@ -25,6 +25,36 @@
                     <t t-esc="labels.all"/>
                 </button>
             </div>
+
+            <t t-if="state.tags.length">
+                <div class="o-discuss-hub-sidebar-tags mt-2">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <small class="text-muted">
+                            <t t-esc="labels.tags"/>
+                        </small>
+                        <button
+                            t-if="activeTagIds.length"
+                            type="button"
+                            class="btn btn-link btn-sm p-0"
+                            t-on-click="() => this.clearTags()"
+                        >
+                            <t t-esc="labels.clear"/>
+                        </button>
+                    </div>
+                    <div class="o-discuss-hub-sidebar-tags-list d-flex flex-wrap gap-1">
+                        <button
+                            t-foreach="state.tags"
+                            t-as="tag"
+                            t-key="tag.id"
+                            type="button"
+                            t-attf-class="o-discuss-hub-tag o_tag_color_#{tag.color || 0} #{activeTagIds.includes(tag.id) ? 'o-discuss-hub-tag--active' : ''}"
+                            t-on-click="() => this.toggleTag(tag.id)"
+                        >
+                            <t t-esc="tag.name"/>
+                        </button>
+                    </div>
+                </div>
+            </t>
         </div>
     </t>
 </templates>
