@@ -9,16 +9,6 @@ import {patch} from "@web/core/utils/patch";
 const GATEWAY_CATEGORY_PREFIX = "mail_gateway_instance_";
 const GATEWAY_CATEGORY_SEQUENCE = 24;
 
-function removeThreadFromCategory(category, thread) {
-    if (!category || !thread) {
-        return;
-    }
-    if (!thread.in(category.threads)) {
-        return;
-    }
-    category.threads._.deleteNoinv(category.threads, thread);
-}
-
 function getGatewayInfo(thread) {
     const gateway = thread.gateway;
     const rawGateway = thread.gateway_id;
@@ -64,45 +54,10 @@ function getGatewayCategory(thread) {
     return category;
 }
 
-function getExistingGatewayCategory(thread) {
-    const gatewayInfo = getGatewayInfo(thread);
-    const store = thread.store;
-    if (!gatewayInfo || !store || !store.DiscussAppCategory) {
-        return null;
-    }
-    const categoryId = `${GATEWAY_CATEGORY_PREFIX}${gatewayInfo.id}`;
-    return store.DiscussAppCategory.get({id: categoryId});
-}
-
-function syncGatewayCategory(thread) {
-    if (!thread || thread.channel_type !== "gateway") {
-        return;
-    }
-    const store = thread.store;
-    const channelsCategory = store?.discuss?.channels;
-    const chatsCategory = store?.discuss?.chats;
-    const globalCategory = store?.discuss?.gateway;
-    if (thread.active === false) {
-        const existingCategory = getExistingGatewayCategory(thread);
-        removeThreadFromCategory(channelsCategory, thread);
-        removeThreadFromCategory(chatsCategory, thread);
-        removeThreadFromCategory(globalCategory, thread);
-        removeThreadFromCategory(existingCategory, thread);
-        return;
-    }
-    const category = getGatewayCategory(thread);
-    removeThreadFromCategory(channelsCategory, thread);
-    removeThreadFromCategory(chatsCategory, thread);
-    if (category && globalCategory) {
-        removeThreadFromCategory(globalCategory, thread);
-    }
-    if (category) {
-        category.threads.add(thread);
-        return;
-    }
-    if (globalCategory) {
-        globalCategory.threads.add(thread);
-    }
+function requestGatewayCategoryCompute(thread) {
+    // Touch the computed relational field so lazy-compute evaluates (and inverse
+    // lists get updated) without calling low-level requestCompute() with proxies.
+    void thread?.discussAppCategory;
 }
 
 patch(Thread, {
@@ -111,7 +66,9 @@ patch(Thread, {
         if (data && thread.channel_type === "gateway") {
             assignIn(thread, data, ["anonymous_name", "gateway"]);
         }
-        syncGatewayCategory(thread);
+        if (thread.channel_type === "gateway") {
+            requestGatewayCategoryCompute(thread);
+        }
         return thread;
     },
 });
@@ -126,7 +83,9 @@ patch(Thread.prototype, {
             data &&
             ("gateway" in data || "gateway_id" in data || "channel_type" in data || "active" in data)
         ) {
-            syncGatewayCategory(this);
+            if (this.channel_type === "gateway") {
+                requestGatewayCategoryCompute(this);
+            }
         }
     },
     _computeDiscussAppCategory() {
@@ -134,7 +93,11 @@ patch(Thread.prototype, {
             return;
         }
         if (this.channel_type === "gateway") {
-            return getGatewayCategory(this) || super._computeDiscussAppCategory(...arguments);
+            return (
+                getGatewayCategory(this) ||
+                this.store?.discuss?.gateway ||
+                super._computeDiscussAppCategory(...arguments)
+            );
         }
         return super._computeDiscussAppCategory(...arguments);
     },

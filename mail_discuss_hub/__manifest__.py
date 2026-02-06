@@ -27,8 +27,10 @@
     "assets": {
         "web.assets_backend": [
             "mail_discuss_hub/static/src/xml/discuss_sidebar_filters.xml",
+            "mail_discuss_hub/static/src/xml/discuss_sidebar_categories.xml",
             "mail_discuss_hub/static/src/js/discuss_sidebar_filters.esm.js",
             "mail_discuss_hub/static/src/js/discuss_sidebar_filter_registry.esm.js",
+            "mail_discuss_hub/static/src/scss/discuss_sidebar_filters.scss",
         ],
     },
     "installable": True,

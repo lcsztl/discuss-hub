@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <!--
+    Root cause (intermittent): the core template renders each category as a
+    multi-root block (header + threads as siblings). Under repeated filter
+    changes and expand/collapse, Owl can end up patching the thread nodes outside
+    of their intended category block (they "fall through" to the bottom).
+
+    Fix: wrap the category call in a single DOM container per category so the
+    keyed foreach has a stable boundary, preventing thread nodes from escaping.
+    -->
+    <t t-inherit="mail.DiscussSidebarCategories" t-inherit-mode="extension">
+        <xpath expr="//t[@t-call='mail.DiscussSidebarCategories.category']" position="replace">
+            <div class="o-mail-DiscussSidebarCategories-category" t-if="cat.isVisible">
+                <t t-call="mail.DiscussSidebarCategories.category">
+                    <t t-set="category" t-value="cat"/>
+                </t>
+            </div>
+        </xpath>
+    </t>
+
+    <!-- Ensure the category itself is single-root too (belt-and-suspenders). -->
+    <t t-inherit="mail.DiscussSidebarCategories.category" t-inherit-mode="extension">
+        <xpath expr="." position="replace">
+            <div class="o-mail-DiscussSidebarCategories-categoryInner">
+                <DiscussSidebarCategory category="category"/>
+                <t t-if="category.open">
+                    <DiscussSidebarChannel
+                        t-foreach="filteredThreads(category.threads)"
+                        t-as="thread"
+                        t-key="thread.localId"
+                        thread="thread"
+                    />
+                </t>
+                <DiscussSidebarChannel
+                    t-elif="store.discuss.thread?.in(category.threads)"
+                    thread="store.discuss.thread"
+                />
+                <DiscussSidebarChannel
+                    t-elif="store.discuss.thread?.parent_channel_id?.in(category.threads)"
+                    thread="store.discuss.thread.parent_channel_id"
+                />
+            </div>
+        </xpath>
+    </t>
+</templates>

@@ -1,0 +1,15 @@
+// Keep the active filter button from overlaying other Discuss header actions
+// (e.g. "Start a meeting") on narrow layouts.
+.o-discuss-hub-sidebar-filters {
+    .btn-group > .btn {
+        // Bootstrap raises the active button above siblings via z-index; on
+        // narrow/sticky layouts that makes it overlay the Discuss header actions.
+        // Force it behind.
+        z-index: 0 !important;
+    }
+    .btn-group > .btn:focus,
+    .btn-group > .btn:active,
+    .btn-group > .btn.active {
+        z-index: 0 !important;
+    }
+}
