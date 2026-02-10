@@ -16,7 +16,7 @@ copie apenas estes modulos):
 
 Docker Compose
 ==================
-No momento temos um arquivo docker-compose-dev.yaml para facilitar o
-desenvolvimento local.
+Este repositorio segue o padrao OCA (somente addons).
 
-``docker compose -f compose-dev.yaml up -d odoo evolution``
+Para um ambiente pronto via Docker Compose (build do Odoo + dependencias + meta
+addon para instalar tudo), use o projeto ``discuss-hub-env``.
