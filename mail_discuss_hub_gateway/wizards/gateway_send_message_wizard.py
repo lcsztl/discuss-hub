@@ -90,12 +90,19 @@ class MailGatewaySendMessageWizard(models.TransientModel):
 
     def _build_channel_members(self, gateway, author_partner):
         members = []
+        seen_partner_ids = set()
         auto_users = (
             gateway._get_auto_assign_users()
             if hasattr(gateway, "_get_auto_assign_users")
             else gateway.member_ids
         )
         for user in auto_users:
+            partner = user.partner_id
+            if not partner:
+                continue
+            if partner.id in seen_partner_ids:
+                continue
+            seen_partner_ids.add(partner.id)
             if user.partner_id:
                 members.append(
                     Command.create(
@@ -110,7 +117,12 @@ class MailGatewaySendMessageWizard(models.TransientModel):
             if gateway.webhook_user_id and gateway.webhook_user_id.partner_id
             else False
         )
-        if author_partner and (not webhook_partner or author_partner.id != webhook_partner.id):
+        if (
+            author_partner
+            and (not webhook_partner or author_partner.id != webhook_partner.id)
+            and author_partner.id not in seen_partner_ids
+        ):
+            seen_partner_ids.add(author_partner.id)
             members.append(
                 Command.create(
                     {
@@ -234,4 +246,3 @@ class MailGatewaySendMessageWizard(models.TransientModel):
             self.attachment_ids.unlink()
 
         return {"type": "ir.actions.act_window_close"}
-
