@@ -11,7 +11,7 @@
     "contributors": [
         "DiscussHub Team <https://github.com/discusshub/discuss_hub>",
     ],
-    "website": "https://github.com/lcsztl/discuss_hub",
+    "website": "https://github.com/lcsztl/discuss-hub",
     "depends": ["mail_discuss_hub", "helpdesk_mgmt"],
     "post_init_hook": "post_init_hook",
     "data": [

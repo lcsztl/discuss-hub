@@ -8,9 +8,9 @@ Mail Gateway WhatsApp Evolution API Manager
 .. |badge2| image:: https://img.shields.io/badge/license-AGPL--3-blue.png
     :target: http://www.gnu.org/licenses/agpl-3.0-standalone.html
     :alt: License: AGPL-3
-.. |badge3| image:: https://img.shields.io/badge/github-lcsztl%2Fdiscuss_hub-lightgray.png?logo=github
-    :target: https://github.com/lcsztl/discuss_hub
-    :alt: lcsztl/discuss_hub
+.. |badge3| image:: https://img.shields.io/badge/github-lcsztl%2Fdiscuss-hub-lightgray.png?logo=github
+    :target: https://github.com/lcsztl/discuss-hub
+    :alt: lcsztl/discuss-hub
 
 |badge1| |badge2| |badge3|
 
@@ -36,7 +36,7 @@ Main features:
 Dependencies
 ============
 
-- ``mail_gateway_whatsapp_evolution_api`` (`lcsztl/discuss_hub <https://github.com/lcsztl/discuss_hub>`_)
+- ``mail_gateway_whatsapp_evolution_api`` (`lcsztl/discuss-hub <https://github.com/lcsztl/discuss-hub>`_)
 
 Configuration
 =============
@@ -62,7 +62,7 @@ Roadmap (TODO)
 Bug Tracker
 ===========
 
-Bugs are tracked on `GitHub Issues <https://github.com/lcsztl/discuss_hub/issues>`_.
+Bugs are tracked on `GitHub Issues <https://github.com/lcsztl/discuss-hub/issues>`_.
 In case of trouble, please check there if your issue has already been reported.
 
 Credits
@@ -78,5 +78,5 @@ Maintainers
 
 This module is maintained by Lucas Zotelli.
 
-This module is part of the `lcsztl/discuss_hub <https://github.com/lcsztl/discuss_hub>`_
+This module is part of the `lcsztl/discuss-hub <https://github.com/lcsztl/discuss-hub>`_
 project on GitHub.

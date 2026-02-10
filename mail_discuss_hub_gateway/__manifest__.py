@@ -6,7 +6,7 @@
     "version": "18.0.1.0.0",
     "license": "AGPL-3",
     "author": "Soloz Technologies",
-    "website": "https://github.com/lcsztl/discuss_hub",
+    "website": "https://github.com/lcsztl/discuss-hub",
     "depends": ["mail_gateway", "mail_discuss_hub"],
     "data": [
         "data/rule_update.xml",

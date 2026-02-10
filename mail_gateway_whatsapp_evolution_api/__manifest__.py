@@ -11,7 +11,7 @@
     "contributors": [
         "DiscussHub Team <https://github.com/discusshub/discuss_hub>",
     ],
-    "website": "https://github.com/lcsztl/discuss_hub",
+    "website": "https://github.com/lcsztl/discuss-hub",
     "depends": ["mail_gateway", "mail_gateway_whatsapp_common"],
     "data": [
         "security/ir.model.access.csv",

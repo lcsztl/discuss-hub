@@ -9,7 +9,7 @@
     "contributors": [
         "DiscussHub Team <https://github.com/discusshub/discuss_hub>",
     ],
-    "website": "https://github.com/lcsztl/discuss_hub",
+    "website": "https://github.com/lcsztl/discuss-hub",
     "depends": ["mail"],
     "data": [
         "data/discuss_hub_groups.xml",
