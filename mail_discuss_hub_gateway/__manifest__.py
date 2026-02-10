@@ -24,6 +24,7 @@
             "mail_discuss_hub_gateway/static/src/js/contact_sidebar_patch.esm.js",
             "mail_discuss_hub_gateway/static/src/js/conversation_tags_panel.esm.js",
             "mail_discuss_hub_gateway/static/src/js/gateway_transfer_panel.esm.js",
+            "mail_discuss_hub_gateway/static/src/js/gateway_sidebar_disable_search_add.esm.js",
             "mail_discuss_hub_gateway/static/src/js/gateway_instance_sidebar.esm.js",
             "mail_discuss_hub_gateway/static/src/js/gateway_sidebar_filter_provider.esm.js",
             "mail_discuss_hub_gateway/static/src/js/message_patch.esm.js",

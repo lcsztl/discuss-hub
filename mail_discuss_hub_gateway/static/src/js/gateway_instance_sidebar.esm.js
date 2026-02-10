@@ -44,8 +44,7 @@ function getGatewayCategory(thread) {
             extraClass: "o-mail-DiscussSidebarCategory-gateway",
             hideWhenEmpty: false,
             canView: false,
-            canAdd: true,
-            addTitle: _t("Search Gateway Channel"),
+            canAdd: false,
             sequence: GATEWAY_CATEGORY_SEQUENCE,
         });
     } else if (gatewayInfo.name && category.name !== gatewayInfo.name) {
