@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="mail_discuss_hub_gateway.ConversationTagsPanel">
+        <ActionPanel title.translate="Tags" icon="'fa fa-tags'">
+            <t t-if="state.loading">
+                <div class="py-2 text-muted">Carregando...</div>
+            </t>
+            <t t-elif="!state.tags.length">
+                <div class="py-2 text-muted">
+                    Nenhuma tag configurada.
+                    <button type="button" class="btn btn-link btn-sm p-0 ms-1" t-on-click="manageTags">
+                        Gerenciar tags
+                    </button>
+                </div>
+            </t>
+            <t t-else="">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <small class="text-muted">Clique para marcar/desmarcar</small>
+                    <div class="d-flex align-items-center gap-2">
+                        <button
+                            t-if="selectedTagIds.length"
+                            type="button"
+                            class="btn btn-link btn-sm p-0"
+                            t-att-disabled="state.saving ? 'disabled' : undefined"
+                            t-on-click="clearTags"
+                        >
+                            Limpar
+                        </button>
+                        <button type="button" class="btn btn-link btn-sm p-0" t-on-click="manageTags">
+                            Gerenciar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Reuse existing Discuss Hub tag chip styles by keeping the same wrapper class. -->
+                <div class="o-discuss-hub-sidebar-tags">
+                    <div class="o-discuss-hub-sidebar-tags-list d-flex flex-wrap gap-1">
+                        <button
+                            t-foreach="state.tags"
+                            t-as="tag"
+                            t-key="tag.id"
+                            type="button"
+                            t-att-disabled="state.saving ? 'disabled' : undefined"
+                            t-attf-class="o-discuss-hub-tag o_tag_color_#{tag.color || 0} #{isSelected(tag.id) ? 'o-discuss-hub-tag--active' : ''}"
+                            t-on-click="() => this.toggleTag(tag.id)"
+                        >
+                            <t t-esc="tag.name"/>
+                        </button>
+                    </div>
+                </div>
+            </t>
+        </ActionPanel>
+    </t>
+</templates>
+
