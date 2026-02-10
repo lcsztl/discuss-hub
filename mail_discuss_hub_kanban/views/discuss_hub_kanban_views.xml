@@ -87,7 +87,7 @@
         <record id="mail_discuss_hub_channel_kanban_action" model="ir.actions.act_window">
             <field name="name">Kanban de Conversas</field>
             <field name="res_model">discuss.channel</field>
-            <field name="view_mode">kanban,tree,form</field>
+            <field name="view_mode">kanban,list,form</field>
             <field name="view_id" ref="mail_discuss_hub_channel_kanban_view"/>
             <field name="search_view_id" ref="mail_discuss_hub_channel_search_view"/>
             <field name="domain">[("channel_type", "=", "gateway")]</field>
