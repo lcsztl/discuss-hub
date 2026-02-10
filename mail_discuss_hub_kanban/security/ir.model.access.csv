@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_mail_discuss_hub_stage_user,mail.discuss.hub.stage user,model_mail_discuss_hub_stage,base.group_user,1,0,0,0
+access_mail_discuss_hub_stage_manager,mail.discuss.hub.stage manager,model_mail_discuss_hub_stage,mail_discuss_hub.group_discuss_hub_manager,1,1,1,1
+access_mail_discuss_hub_stage_system,mail.discuss.hub.stage system,model_mail_discuss_hub_stage,base.group_system,1,1,1,1

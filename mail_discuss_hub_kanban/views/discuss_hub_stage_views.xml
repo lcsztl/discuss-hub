@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        <record id="mail_discuss_hub_stage_view_form" model="ir.ui.view">
+            <field name="name">mail.discuss.hub.stage.form</field>
+            <field name="model">mail.discuss.hub.stage</field>
+            <field name="arch" type="xml">
+                <form string="Stages">
+                    <sheet>
+                        <div class="oe_title">
+                            <label for="name"/>
+                            <h1>
+                                <field name="name" placeholder="e.g. Em andamento"/>
+                            </h1>
+                        </div>
+                        <group>
+                            <group>
+                                <field name="sequence"/>
+                                <field name="fold"/>
+                                <field name="active"/>
+                            </group>
+                            <group>
+                                <field name="company_id" groups="base.group_multi_company"/>
+                                <field name="team_id"/>
+                            </group>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="mail_discuss_hub_stage_view_tree" model="ir.ui.view">
+            <field name="name">mail.discuss.hub.stage.list</field>
+            <field name="model">mail.discuss.hub.stage</field>
+            <field name="arch" type="xml">
+                <list string="Stages" editable="bottom" sample="1">
+                    <field name="sequence" widget="handle"/>
+                    <field name="name"/>
+                    <field name="team_id" optional="show"/>
+                    <field name="fold" optional="hide"/>
+                    <field name="active" optional="hide"/>
+                    <field name="company_id" optional="hide" groups="base.group_multi_company"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="mail_discuss_hub_stage_action" model="ir.actions.act_window">
+            <field name="name">Stages</field>
+            <field name="res_model">mail.discuss.hub.stage</field>
+            <field name="view_mode">list,form</field>
+            <field name="view_id" ref="mail_discuss_hub_stage_view_tree"/>
+            <field name="context">{}</field>
+        </record>
+
+        <menuitem
+            id="mail_discuss_hub_stage_menu"
+            name="Stages"
+            parent="mail.menu_configuration"
+            action="mail_discuss_hub_stage_action"
+            sequence="41"
+            groups="base.group_system,mail_discuss_hub.group_discuss_hub_manager"
+        />
+    </data>
+</odoo>
