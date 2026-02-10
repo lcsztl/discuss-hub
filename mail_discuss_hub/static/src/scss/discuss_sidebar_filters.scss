@@ -23,7 +23,11 @@
         line-height: 1;
         padding: 0.35rem 0.6rem;
         opacity: 0.75;
-        transition: opacity 120ms ease, transform 120ms ease;
+        transition:
+            opacity 120ms ease,
+            transform 120ms ease,
+            box-shadow 120ms ease,
+            border-color 120ms ease;
     }
 
     .o-discuss-hub-tag:hover {
@@ -33,5 +37,9 @@
 
     .o-discuss-hub-tag--active {
         opacity: 1;
+        border-color: $o-brand-primary;
+        // Make active tags clearly distinguishable from the unselected ones.
+        box-shadow: 0 0 0 2px rgba($o-brand-primary, 0.18);
+        font-weight: 600;
     }
 }
