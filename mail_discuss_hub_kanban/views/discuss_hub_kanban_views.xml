@@ -73,7 +73,7 @@
                     <filter
                         string="Nao atribuidas"
                         name="unassigned"
-                        domain="[(\"channel_member_ids\", \"not any\", [(\"partner_id.user_ids.share\", \"=\", False)])]"
+                        domain="[('channel_member_ids', 'not any', [('partner_id.user_ids.share', '=', False)])]"
                     />
 
                     <group expand="0" string="Agrupar por">
