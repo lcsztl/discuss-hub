@@ -6,6 +6,36 @@ from odoo import Command, models
 class MailGatewayAbstract(models.AbstractModel):
     _inherit = "mail.gateway.abstract"
 
+    @staticmethod
+    def _extract_channel_name(update):
+        if not isinstance(update, dict):
+            return False
+
+        for key in ("name", "subject", "pushName"):
+            value = (update.get(key) or "").strip()
+            if value:
+                return value
+
+        data = update.get("data")
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        if isinstance(data, dict):
+            for key in ("name", "subject", "pushName"):
+                value = (data.get(key) or "").strip()
+                if value:
+                    return value
+        return False
+
+    @staticmethod
+    def _fallback_channel_name(token):
+        chat_token = str(token or "").strip()
+        if not chat_token:
+            return "Gateway"
+        base = chat_token.split("@", 1)[0] if "@" in chat_token else chat_token
+        if chat_token.endswith("@g.us"):
+            return f"Grupo {base}"
+        return base or chat_token
+
     def _get_channel(self, gateway, token, update, force_create=False):
         channel = super()._get_channel(gateway, token, update, force_create=force_create)
         if (
@@ -64,6 +94,9 @@ class MailGatewayAbstract(models.AbstractModel):
             "channel_member_ids": members,
             "company_id": gateway.company_id.id,
         }
+        vals["name"] = self._extract_channel_name(update) or self._fallback_channel_name(
+            token
+        )
         if "group_public_id" in self.env["discuss.channel"]._fields:
             group = gateway._ensure_access_group()
             vals["group_public_id"] = group.id if group else False
