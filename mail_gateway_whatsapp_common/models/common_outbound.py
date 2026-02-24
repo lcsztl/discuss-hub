@@ -160,7 +160,6 @@ class MailGatewayWhatsappCommonOutbound:
             )
         return attachments
 
-    @staticmethod
     def _write_outbound_failure(self, record, error_message):
         if not record:
             return

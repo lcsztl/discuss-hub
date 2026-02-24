@@ -15,7 +15,7 @@
                     <field name="discuss_hub_tag_ids"/>
 
                     <templates>
-                        <t t-name="kanban-box">
+                        <t t-name="card">
                             <div class="o_kanban_record">
                                 <div class="o_kanban_record_top">
                                     <div class="o_kanban_record_headings">
@@ -42,10 +42,15 @@
                                 </div>
 
                                 <div class="mt-2 d-flex gap-2">
-                                    <a type="object" name="action_open_discuss" class="btn btn-link btn-sm p-0">
+                                    <a
+                                        type="object"
+                                        name="action_open_discuss"
+                                        class="btn btn-link btn-sm p-0"
+                                        role="button"
+                                    >
                                         Abrir chat
                                     </a>
-                                    <a type="edit" class="btn btn-link btn-sm p-0">
+                                    <a type="edit" class="btn btn-link btn-sm p-0" role="button">
                                         Editar
                                     </a>
                                 </div>

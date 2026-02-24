@@ -1,0 +1,101 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* mail_discuss_hub_gateway
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 18.0\n"
+"POT-Creation-Date: 2026-02-11 00:00+0000\n"
+"PO-Revision-Date: 2026-02-11 00:00+0000\n"
+"Language-Team: \n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_discuss_hub_inbox__gateway_id
+#: model:ir.model.fields.selection,name:mail_discuss_hub_gateway.selection__discuss_hub_inbox__inbox_type__gateway
+msgid "Gateway"
+msgstr "Gateway"
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_mail_gateway__discuss_team_ids
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_discuss_hub_inbox__discuss_team_ids
+msgid "Discuss Teams"
+msgstr "Equipes do Discuss"
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_mail_gateway__discuss_team_ids
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_discuss_hub_inbox__discuss_team_ids
+msgid "Teams allowed to handle this inbox."
+msgstr "Equipes permitidas para atender esta caixa de entrada."
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_mail_gateway__discuss_agent_ids
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_discuss_hub_inbox__discuss_agent_ids
+msgid "Discuss Agents"
+msgstr "Agentes do Discuss"
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_mail_gateway__discuss_agent_ids
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_discuss_hub_inbox__discuss_agent_ids
+msgid "Agents allowed to handle this inbox."
+msgstr "Agentes permitidos para atender esta caixa de entrada."
+
+#. module: mail_discuss_hub_gateway
+#: model_terms:ir.ui.view,arch_db:mail_discuss_hub_gateway.mail_discuss_hub_gateway_inbox_view_form
+msgid "Auto Assign"
+msgstr "Atribuicao automatica"
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_mail_gateway__outgoing_signature
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_discuss_hub_inbox__outgoing_signature
+msgid "Outgoing signature"
+msgstr "Assinatura de saida"
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_mail_gateway__outgoing_signature
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_discuss_hub_inbox__outgoing_signature
+msgid ""
+"When enabled, Odoo prepends the message author name to outbound text "
+"messages (e.g. '*Mitchel Admin:* Hello'). Useful when multiple internal "
+"users share the same gateway."
+msgstr ""
+"Quando ativado, o Odoo adiciona o nome do autor no inicio das mensagens de "
+"texto de saida (ex.: '*Mitchel Admin:* Ola'). Util quando varios usuarios "
+"internos compartilham o mesmo gateway."
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_mail_gateway__reopen_archived_conversations
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_discuss_hub_inbox__reopen_archived_conversations
+msgid "Reopen archived conversations"
+msgstr "Reabrir conversas arquivadas"
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_mail_gateway__reopen_archived_conversations
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_discuss_hub_inbox__reopen_archived_conversations
+msgid ""
+"When enabled, any inbound or outbound gateway message will reopen archived "
+"conversations instead of creating a new one."
+msgstr ""
+"Quando ativado, qualquer mensagem recebida ou enviada pelo gateway reabrira "
+"conversas arquivadas em vez de criar uma nova."
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_mail_gateway__outgoing_signature_format
+#: model:ir.model.fields,field_description:mail_discuss_hub_gateway.field_discuss_hub_inbox__outgoing_signature_format
+msgid "Signature format"
+msgstr "Formato da assinatura"
+
+#. module: mail_discuss_hub_gateway
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_mail_gateway__outgoing_signature_format
+#: model:ir.model.fields,help:mail_discuss_hub_gateway.field_discuss_hub_inbox__outgoing_signature_format
+msgid ""
+"Format used when 'Outgoing signature' is enabled. Supports: {author}. Tip: "
+"you can use \\n for a new line. Example: '*{author}:*\\n'."
+msgstr ""
+"Formato usado quando 'Assinatura de saida' estiver ativada. Suporta: "
+"{author}. Dica: voce pode usar \\n para nova linha. Exemplo: "
+"'*{author}:*\\n'."
