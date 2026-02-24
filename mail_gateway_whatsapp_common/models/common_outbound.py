@@ -1,5 +1,6 @@
 from odoo.addons.base.models.ir_mail_server import MailDeliveryException
 from odoo.tools import html2plaintext
+from psycopg2 import IntegrityError
 from .outbound_payload import OutboundPayload
 
 class MailGatewayWhatsappCommonOutbound:
@@ -231,7 +232,22 @@ class MailGatewayWhatsappCommonOutbound:
         }
         if sender_name:
             update_vals["gateway_sender_name"] = sender_name
-        mail_message.write(update_vals)
+        try:
+            # Outbound and inbound can race to persist the same gateway_message_key.
+            # Isolate this write so a duplicate key does not abort the caller transaction.
+            with self.env.cr.savepoint():
+                mail_message.write(update_vals)
+        except IntegrityError:
+            if message_key:
+                existing = (
+                    self.env["mail.message"]
+                    .sudo()
+                    .search([("gateway_message_key", "=", message_key)], limit=1)
+                )
+                if existing and existing.id != mail_message.id:
+                    record.sudo().write({"gateway_message_id": message_id})
+                    return
+            raise
         record.sudo().write({"gateway_message_id": message_id})
 
 
