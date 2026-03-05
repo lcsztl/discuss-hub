@@ -11,6 +11,7 @@ Integrações Discuss + mail_gateway (UI e regras comuns de canais gateway).
 ## Dependencias
 
 - `mail_gateway`
+- `mail_gateway_base`
 - `mail_discuss_hub`
 
 ## Arquivos principais

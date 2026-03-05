@@ -33,4 +33,4 @@ Gateway WhatsApp via WAHA.
 - Anexos/medias ainda nao suportados no envio nem no inbound.
 - Devtools e opcional e nunca deve ser dependencia de modulo algum.
 - Fix generico para cache de `_get_gateway_map` fica no addon
-  `mail_gateway_fix`.
+  `mail_gateway_base`.

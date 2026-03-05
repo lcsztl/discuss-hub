@@ -109,19 +109,14 @@ class MailGatewayWhatsappWaha(models.AbstractModel):
             provider=self,
         )
 
-    def _send_outbound(self, gateway, dto):
+    def _send_outbound_text(self, gateway, dto, body):
         self._ensure_gateway_ready(gateway)
         session = gateway.waha_session or "default"
         chat_id = self._normalize_chat_id(dto.chat_id)
-        if dto.attachments:
-            raise UserError(_("WAHA media sending is not supported yet."))
-        body = (dto.text or "").strip()
-        if not body:
-            raise UserError(_("Message body is empty."))
         payload = {
             "session": session,
             "chatId": chat_id,
-            "text": body,
+            "text": (body or "").strip(),
         }
         response = requests.post(
             self._join_url(gateway.waha_api_url, "/api/sendText"),
@@ -130,7 +125,22 @@ class MailGatewayWhatsappWaha(models.AbstractModel):
             timeout=20,
         )
         response.raise_for_status()
-        message = response.json() if response.content else {}
+        return response.json() if response.content else {}
+
+    def _send_outbound_attachment(self, gateway, dto, attachment):
+        raise UserError(_("WAHA media sending is not supported yet."))
+
+    def _send_outbound(self, gateway, dto):
+        # Kept for direct calls, though common orchestration is the canonical path.
+        self._ensure_gateway_ready(gateway)
+        session = gateway.waha_session or "default"
+        chat_id = self._normalize_chat_id(dto.chat_id)
+        if dto.attachments:
+            raise UserError(_("WAHA media sending is not supported yet."))
+        body = (dto.text or "").strip()
+        if not body:
+            raise UserError(_("Message body is empty."))
+        message = self._send_outbound_text(gateway, dto, body)
         return {
             "message_id": self._extract_message_id_from_response(message),
             "instance": session,

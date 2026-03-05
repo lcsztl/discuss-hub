@@ -295,6 +295,23 @@ class MailGatewayWhatsappCommonUtils:
 
         values_list = []
         sequence = 1
+        body_key = self._normalize_text_intent_key(dto.text)
+        if body_key:
+            values_list.append(
+                {
+                    "gateway_id": gateway.id,
+                    "gateway_instance": dto.instance or False,
+                    "gateway_chat_id": chat_id,
+                    "mail_message_ref_id": message.id,
+                    "mail_notification_ref_id": record.id,
+                    "intent_type": "text",
+                    "sequence": sequence,
+                    "body_key": body_key,
+                    "expire_at": fields.Datetime.now() + timedelta(minutes=10),
+                }
+            )
+            sequence += 1
+
         for attachment in dto.attachments or []:
             if not isinstance(attachment, dict):
                 continue
@@ -316,22 +333,6 @@ class MailGatewayWhatsappCommonUtils:
                 }
             )
             sequence += 1
-
-        body_key = self._normalize_text_intent_key(dto.text)
-        if body_key:
-            values_list.append(
-                {
-                    "gateway_id": gateway.id,
-                    "gateway_instance": dto.instance or False,
-                    "gateway_chat_id": chat_id,
-                    "mail_message_ref_id": message.id,
-                    "mail_notification_ref_id": record.id,
-                    "intent_type": "text",
-                    "sequence": sequence,
-                    "body_key": body_key,
-                    "expire_at": fields.Datetime.now() + timedelta(minutes=10),
-                }
-            )
 
         return self._create_outbound_intents_autonomous(record.id, values_list)
 

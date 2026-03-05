@@ -1,4 +1,4 @@
-# AGENTS.md - mail_gateway_fix
+# AGENTS.md - mail_gateway_base
 
 ## Leitura obrigatoria
 
@@ -6,7 +6,7 @@
 
 ## Objetivo
 
-Corrigir o cache do lookup de gateways em `mail.gateway`.
+Fornecer base tecnica para addons de gateway (patches e servicos comuns).
 
 ## Pontos importantes
 
@@ -16,3 +16,5 @@ Corrigir o cache do lookup de gateways em `mail.gateway`.
 - Werkzeug 3 removeu `Request.charset`; `mail_gateway` usa esse atributo no
   controller de webhook e gerava 500. Este modulo aplica patch para repor
   `Request.charset` com fallback para `mimetype_params`/`utf-8`.
+- Ownership de `res.partner.gateway_phone` fica neste modulo.
+- Servico comum de envio gateway fica em `mail.gateway.dispatch.service`.

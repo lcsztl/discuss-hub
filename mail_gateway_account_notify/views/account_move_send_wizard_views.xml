@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="account_move_send_wizard_form_mail_gateway" model="ir.ui.view">
+        <field name="name">account.move.send.wizard.form.mail.gateway</field>
+        <field name="model">account.move.send.wizard</field>
+        <field name="inherit_id" ref="account.account_move_send_wizard_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='sending_method_checkboxes']" position="after">
+                <group invisible="'mail_gateway' not in sending_methods">
+                    <field
+                        name="mail_gateway_id"
+                        options="{'no_create': True, 'no_edit': True}"
+                        required="'mail_gateway' in sending_methods"
+                    />
+                    <field
+                        name="mail_gateway_to"
+                        placeholder="+5511999999999"
+                        required="'mail_gateway' in sending_methods"
+                    />
+                </group>
+            </xpath>
+
+            <xpath expr="//div[@invisible=&quot;'email' not in sending_methods&quot;]" position="after">
+                <div invisible="'mail_gateway' not in sending_methods or 'email' in sending_methods">
+                    <group>
+                        <field name="mail_subject" placeholder="Subject..."/>
+                    </group>
+                    <field
+                        name="mail_body"
+                        class="oe-bordered-editor"
+                        widget="html_mail"
+                    />
+                    <group>
+                        <group>
+                            <field
+                                name="mail_template_id"
+                                options="{'no_create': True, 'no_edit': True}"
+                                context="{'default_model': 'account.move'}"
+                            />
+                        </group>
+                    </group>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>

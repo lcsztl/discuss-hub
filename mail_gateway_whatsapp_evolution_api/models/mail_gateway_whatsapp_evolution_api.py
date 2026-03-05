@@ -618,57 +618,75 @@ class MailGatewayWhatsappEvolutionApi(models.AbstractModel):
             provider=self,
         )
 
-    def _send_outbound(self, gateway, dto):
+    def _send_outbound_text(self, gateway, dto, body):
         self._ensure_gateway_ready(gateway)
-        message = False
+        instance = self._instance_name(gateway)
+        payload = {"number": dto.chat_id, "text": (body or "").strip()}
+        response = requests.post(
+            self._join_url(
+                gateway.evolution_api_url,
+                f"/message/sendText/{instance}",
+            ),
+            json=payload,
+            headers=self._get_headers(gateway),
+            timeout=20,
+        )
+        response.raise_for_status()
+        return response.json() if response.content else {}
+
+    def _send_outbound_attachment(self, gateway, dto, attachment):
+        self._ensure_gateway_ready(gateway)
+        media = attachment.get("datas")
+        if isinstance(media, bytes):
+            media = media.decode("utf-8")
+        if not media:
+            return False
+
+        instance = self._instance_name(gateway)
+        payload = {
+            "number": dto.chat_id,
+            "mediatype": self._guess_media_type(attachment.get("mimetype")),
+            "mimetype": attachment.get("mimetype"),
+            "media": media,
+            "fileName": attachment.get("name") or "attachment",
+        }
+        response = requests.post(
+            self._join_url(
+                gateway.evolution_api_url,
+                f"/message/sendMedia/{instance}",
+            ),
+            json=payload,
+            headers=self._get_headers(gateway),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json() if response.content else {}
+
+    def _send_outbound(self, gateway, dto):
+        # Kept for direct calls, though common orchestration is the canonical path.
+        self._ensure_gateway_ready(gateway)
+        text_message = False
         responses = []
         instance = self._instance_name(gateway)
-        headers = self._get_headers(gateway)
-        number = dto.chat_id
-        for attachment in dto.attachments or []:
-            media = attachment.get("datas")
-            if isinstance(media, bytes):
-                media = media.decode("utf-8")
-            if not media:
-                continue
-            payload = {
-                "number": number,
-                "mediatype": self._guess_media_type(attachment.get("mimetype")),
-                "mimetype": attachment.get("mimetype"),
-                "media": media,
-                "fileName": attachment.get("name") or "attachment",
-            }
-            response = requests.post(
-                self._join_url(
-                    gateway.evolution_api_url,
-                    f"/message/sendMedia/{instance}",
-                ),
-                json=payload,
-                headers=headers,
-                timeout=30,
-            )
-            response.raise_for_status()
-            message = response.json() if response.content else {}
-            responses.append(message)
         body = (dto.text or "").strip()
         if body:
-            payload = {"number": number, "text": body}
-            response = requests.post(
-                self._join_url(
-                    gateway.evolution_api_url,
-                    f"/message/sendText/{instance}",
-                ),
-                json=payload,
-                headers=headers,
-                timeout=20,
+            text_message = self._send_outbound_text(gateway, dto, body)
+            if text_message:
+                responses.append(text_message)
+        for attachment in dto.attachments or []:
+            if not isinstance(attachment, dict):
+                continue
+            attachment_payload = self._send_outbound_attachment(
+                gateway, dto, attachment
             )
-            response.raise_for_status()
-            message = response.json() if response.content else {}
-            responses.append(message)
+            if attachment_payload:
+                responses.append(attachment_payload)
+
+        message_for_tracking = text_message or (responses[-1] if responses else False)
         return {
-            "message_id": self._extract_message_id_from_response(message),
+            "message_id": self._extract_message_id_from_response(message_for_tracking),
             "instance": instance,
-            "chat_id": number,
+            "chat_id": dto.chat_id,
             "responses": responses,
         }
 

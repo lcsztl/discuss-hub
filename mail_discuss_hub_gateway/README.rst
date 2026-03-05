@@ -13,4 +13,5 @@ Dependencies
 ============
 
 - ``mail_gateway``
+- ``mail_gateway_base``
 - ``mail_discuss_hub``

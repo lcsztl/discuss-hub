@@ -1,9 +1,46 @@
+import html as std_html
+import re
+
 from odoo.addons.base.models.ir_mail_server import MailDeliveryException
 from odoo.tools import html2plaintext
 from psycopg2 import IntegrityError
 from .outbound_payload import OutboundPayload
 
 class MailGatewayWhatsappCommonOutbound:
+    _html_tag_re = re.compile(r"(?is)<\s*/?\s*[a-zA-Z][^>]*>")
+
+    _span_bold_re = re.compile(
+        r'(?is)<span\b[^>]*font-weight\s*:\s*(?:bold|[5-9]00)[^>]*>(.*?)</span>'
+    )
+    _span_italic_re = re.compile(
+        r'(?is)<span\b[^>]*font-style\s*:\s*italic[^>]*>(.*?)</span>'
+    )
+    _span_strike_re = re.compile(
+        r'(?is)<span\b[^>]*text-decoration[^>]*line-through[^>]*>(.*?)</span>'
+    )
+    _script_style_re = re.compile(
+        r"(?is)<\s*(script|style)\b[^>]*>.*?<\s*/\s*(script|style)\s*>"
+    )
+    _comment_re = re.compile(r"(?is)<!--.*?-->")
+    _li_open_re = re.compile(r"(?is)<\s*li\b[^>]*>")
+    _li_close_re = re.compile(r"(?is)</\s*li\s*>")
+    _br_re = re.compile(r"(?is)<\s*br\s*/?\s*>")
+    _block_tags_re = re.compile(
+        r"(?is)</?\s*(?:p|div|section|article|header|footer|blockquote|ul|ol|"
+        r"table|thead|tbody|tfoot|tr|h[1-6]|pre)\b[^>]*>"
+    )
+    _bold_open_re = re.compile(r"(?is)<\s*(?:strong|b)\b[^>]*>")
+    _bold_close_re = re.compile(r"(?is)</\s*(?:strong|b)\s*>")
+    _italic_open_re = re.compile(r"(?is)<\s*(?:em|i)\b[^>]*>")
+    _italic_close_re = re.compile(r"(?is)</\s*(?:em|i)\s*>")
+    _strike_open_re = re.compile(r"(?is)<\s*(?:s|del)\b[^>]*>")
+    _strike_close_re = re.compile(r"(?is)</\s*(?:s|del)\s*>")
+    _remaining_tags_re = re.compile(r"(?is)<[^>]+>")
+    _leading_space_line_re = re.compile(r"[ \t]+\n")
+    _trailing_space_line_re = re.compile(r"\n[ \t]+")
+    _multi_spaces_re = re.compile(r"[ \t]{2,}")
+    _multi_breaks_re = re.compile(r"\n{3,}")
+
     def _get_outbound_provider(self, gateway):
         if not gateway or not gateway.gateway_type:
             return False
@@ -52,7 +89,7 @@ class MailGatewayWhatsappCommonOutbound:
             )
         intent_ids = self._register_outbound_intents(gateway, record, dto)
         try:
-            result = provider._send_outbound(gateway, dto)
+            result = self._send_outbound_parts(provider, gateway, dto)
         except Exception as exc:
             self._logger.exception("Unable to send gateway message")
             self._mark_outbound_intents_failed(intent_ids)
@@ -74,6 +111,59 @@ class MailGatewayWhatsappCommonOutbound:
         if auto_commit:
             record._cr.commit()
         return result or {"status": "sent"}
+
+    def _send_outbound_parts(self, provider, gateway, dto):
+        responses = []
+        text_payload = False
+
+        body = (dto.text or "").strip()
+        if body:
+            text_payload = self._send_outbound_text_part(
+                provider,
+                gateway,
+                dto,
+                body,
+            )
+            if text_payload:
+                responses.append(text_payload)
+
+        for attachment in dto.attachments or []:
+            if not isinstance(attachment, dict):
+                continue
+            attachment_payload = self._send_outbound_attachment_part(
+                provider,
+                gateway,
+                dto,
+                attachment,
+            )
+            if attachment_payload:
+                responses.append(attachment_payload)
+
+        tracked_payload = text_payload or (responses[-1] if responses else False)
+        return {
+            "message_id": self._extract_message_id_from_payload(tracked_payload),
+            "instance": dto.instance,
+            "chat_id": dto.chat_id,
+            "responses": responses,
+        }
+
+    def _send_outbound_text_part(self, provider, gateway, dto, body):
+        sender = getattr(provider, "_send_outbound_text", None)
+        if not callable(sender):
+            raise MailDeliveryException(
+                "Provider '%s' must implement _send_outbound_text."
+                % (getattr(provider, "_name", "unknown"))
+            )
+        return sender(gateway, dto, body)
+
+    def _send_outbound_attachment_part(self, provider, gateway, dto, attachment):
+        sender = getattr(provider, "_send_outbound_attachment", None)
+        if not callable(sender):
+            raise MailDeliveryException(
+                "Provider '%s' must implement _send_outbound_attachment."
+                % (getattr(provider, "_name", "unknown"))
+            )
+        return sender(gateway, dto, attachment)
 
 
     def _send_reaction_outbound(
@@ -134,7 +224,7 @@ class MailGatewayWhatsappCommonOutbound:
         channel = record.gateway_channel_id
         if not message or not channel:
             return False
-        body = html2plaintext(message.body or "")
+        body = self._to_whatsapp_text(message.body or "")
         author_name = message.author_id.name or message.author_guest_id.name or False
         dto = OutboundPayload(
             provider=gateway.gateway_type,
@@ -154,6 +244,47 @@ class MailGatewayWhatsappCommonOutbound:
         ):
             dto.text = gateway._apply_outgoing_signature(dto.author_name, dto.text)
         return dto
+
+    def _to_whatsapp_text(self, body):
+        text = html2plaintext(body or "") or ""
+        if text and self._html_tag_re.search(text):
+            text = self._sanitize_html_like_text(text)
+        return self._normalize_whatsapp_text(text)
+
+    def _sanitize_html_like_text(self, text):
+        text = std_html.unescape(text or "")
+        if not text:
+            return ""
+
+        text = self._script_style_re.sub("", text)
+        text = self._comment_re.sub("", text)
+
+        text = self._span_bold_re.sub(r"*\1*", text)
+        text = self._span_italic_re.sub(r"_\1_", text)
+        text = self._span_strike_re.sub(r"~\1~", text)
+
+        text = self._li_open_re.sub("\n- ", text)
+        text = self._li_close_re.sub("", text)
+        text = self._br_re.sub("\n", text)
+        text = self._block_tags_re.sub("\n", text)
+
+        text = self._bold_open_re.sub("*", text)
+        text = self._bold_close_re.sub("*", text)
+        text = self._italic_open_re.sub("_", text)
+        text = self._italic_close_re.sub("_", text)
+        text = self._strike_open_re.sub("~", text)
+        text = self._strike_close_re.sub("~", text)
+
+        text = self._remaining_tags_re.sub("", text)
+        return std_html.unescape(text)
+
+    def _normalize_whatsapp_text(self, text):
+        text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+        text = self._leading_space_line_re.sub("\n", text)
+        text = self._trailing_space_line_re.sub("\n", text)
+        text = self._multi_spaces_re.sub(" ", text)
+        text = self._multi_breaks_re.sub("\n\n", text)
+        return text.strip()
 
 
     def _prepare_outbound_attachments(self, message):
