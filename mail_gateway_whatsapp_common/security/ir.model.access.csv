@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_mail_gateway_message_alias_system,access.mail.gateway.message.alias.system,mail_gateway_whatsapp_common.model_mail_gateway_message_alias,base.group_system,1,1,1,1
+access_mail_gateway_outbound_intent_system,access.mail.gateway.outbound.intent.system,mail_gateway_whatsapp_common.model_mail_gateway_outbound_intent,base.group_system,1,1,1,1

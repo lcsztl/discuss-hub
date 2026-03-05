@@ -50,15 +50,27 @@ class MailGatewayWhatsappCommonOutbound:
             return self._handle_outbound_failure(
                 record, "empty_body", raise_exception
             )
+        intent_ids = self._register_outbound_intents(gateway, record, dto)
         try:
             result = provider._send_outbound(gateway, dto)
         except Exception as exc:
             self._logger.exception("Unable to send gateway message")
+            self._mark_outbound_intents_failed(intent_ids)
             if raise_exception:
                 raise
             self._write_outbound_failure(record, str(exc))
             return {"status": "exception", "error": str(exc)}
-        self._write_outbound_success(record, gateway, dto, result)
+        try:
+            self._write_outbound_success(
+                record,
+                gateway,
+                dto,
+                result,
+                intent_ids=intent_ids,
+            )
+        except Exception:
+            self._mark_outbound_intents_failed(intent_ids)
+            raise
         if auto_commit:
             record._cr.commit()
         return result or {"status": "sent"}
@@ -172,21 +184,31 @@ class MailGatewayWhatsappCommonOutbound:
         )
 
 
-    def _write_outbound_success(self, record, gateway, dto, result):
+    def _write_outbound_success(
+        self, record, gateway, dto, result, intent_ids=None
+    ):
         record.sudo().write(
             {
                 "notification_status": "sent",
                 "failure_reason": False,
             }
         )
-        message_id = False
         instance = dto.instance
         chat_id = dto.chat_id
+        message_id = False
+        message_ids = []
+        intents_marked = False
         if isinstance(result, dict):
             message_id = result.get("message_id") or result.get("id")
             instance = result.get("instance") or instance
             chat_id = result.get("chat_id") or chat_id
-        if isinstance(message_id, list):
+            message_ids = self._collect_outbound_message_ids(result)
+            ordered_response_ids = self._collect_ordered_response_message_ids(result)
+            self._mark_outbound_intents_sent(intent_ids, ordered_response_ids)
+            intents_marked = True
+        if not message_id and message_ids:
+            message_id = message_ids[0]
+        elif isinstance(message_id, list):
             message_id = message_id[0] if message_id else False
         if message_id:
             self._update_outgoing_message(
@@ -196,11 +218,22 @@ class MailGatewayWhatsappCommonOutbound:
                 instance,
                 chat_id,
                 sender_name=dto.author_name,
+                message_ids=message_ids,
             )
+        elif intent_ids and not intents_marked:
+            # Keep intents in sent state even when provider returns only response list.
+            self._mark_outbound_intents_sent(intent_ids, message_ids)
 
 
     def _update_outgoing_message(
-        self, record, gateway, message_id, instance, chat_id, sender_name=None
+        self,
+        record,
+        gateway,
+        message_id,
+        instance,
+        chat_id,
+        sender_name=None,
+        message_ids=None,
     ):
         mail_message = record.mail_message_id.sudo()
         if not mail_message or not message_id:
@@ -215,6 +248,13 @@ class MailGatewayWhatsappCommonOutbound:
                 .search([("gateway_message_key", "=", message_key)], limit=1)
             )
             if existing and existing.id != mail_message.id:
+                self._register_outgoing_message_aliases(
+                    existing,
+                    gateway,
+                    instance,
+                    chat_id,
+                    message_ids or [message_id],
+                )
                 return
         if not sender_name:
             sender_name = (
@@ -245,10 +285,135 @@ class MailGatewayWhatsappCommonOutbound:
                     .search([("gateway_message_key", "=", message_key)], limit=1)
                 )
                 if existing and existing.id != mail_message.id:
+                    self._register_outgoing_message_aliases(
+                        existing,
+                        gateway,
+                        instance,
+                        chat_id,
+                        message_ids or [message_id],
+                    )
                     record.sudo().write({"gateway_message_id": message_id})
                     return
             raise
+        self._register_outgoing_message_aliases(
+            mail_message,
+            gateway,
+            instance,
+            chat_id,
+            message_ids or [message_id],
+        )
         record.sudo().write({"gateway_message_id": message_id})
+
+
+    def _collect_outbound_message_ids(self, result):
+        message_ids = []
+        if not isinstance(result, dict):
+            return message_ids
+        self._append_message_ids(message_ids, result.get("message_id"))
+        self._append_message_ids(message_ids, result.get("id"))
+        responses = result.get("responses") or []
+        if isinstance(responses, dict):
+            responses = [responses]
+        for payload in responses:
+            extracted_id = self._extract_message_id_from_payload(payload)
+            if extracted_id:
+                self._append_message_ids(message_ids, extracted_id)
+        return message_ids
+
+
+    def _collect_ordered_response_message_ids(self, result):
+        ordered = []
+        if not isinstance(result, dict):
+            return ordered
+        responses = result.get("responses") or []
+        if isinstance(responses, dict):
+            responses = [responses]
+        for payload in responses:
+            extracted_id = self._extract_message_id_from_payload(payload)
+            if extracted_id:
+                ordered.append(str(extracted_id).strip())
+        if not ordered:
+            fallback_id = result.get("message_id") or result.get("id")
+            if isinstance(fallback_id, list):
+                fallback_id = fallback_id[0] if fallback_id else False
+            if fallback_id:
+                ordered.append(str(fallback_id).strip())
+        return ordered
+
+
+    def _append_message_ids(self, message_ids, values):
+        if values in (None, False):
+            return
+        if isinstance(values, (list, tuple, set)):
+            for value in values:
+                self._append_message_ids(message_ids, value)
+            return
+        value = str(values).strip()
+        if value and value not in message_ids:
+            message_ids.append(value)
+
+
+    def _extract_message_id_from_payload(self, payload):
+        if not isinstance(payload, dict):
+            return False
+        key_data = payload.get("key") or {}
+        if isinstance(key_data, dict):
+            message_id = key_data.get("id")
+            if message_id:
+                return message_id
+        message_id = payload.get("messageId") or payload.get("keyId")
+        if message_id:
+            return message_id
+        message_data = payload.get("message") or {}
+        if isinstance(message_data, dict):
+            key_data = message_data.get("key") or {}
+            if isinstance(key_data, dict):
+                message_id = key_data.get("id")
+                if message_id:
+                    return message_id
+            message_id = message_data.get("messageId")
+            if message_id:
+                return message_id
+        return payload.get("id")
+
+
+    def _register_outgoing_message_aliases(
+        self, mail_message, gateway, instance, chat_id, message_ids
+    ):
+        if (
+            not mail_message
+            or not gateway
+            or "mail.gateway.message.alias" not in self.env
+        ):
+            return
+        alias_model = self.env["mail.gateway.message.alias"].sudo()
+        for message_id in message_ids or []:
+            message_id = (message_id or "").strip()
+            if not message_id:
+                continue
+            message_key = self._build_message_key_from_values(
+                gateway, instance, chat_id, message_id
+            )
+            if not message_key:
+                continue
+            existing = alias_model.search(
+                [("gateway_message_key", "=", message_key)], limit=1
+            )
+            if existing:
+                continue
+            values = {
+                "gateway_id": gateway.id,
+                "gateway_instance": instance,
+                "gateway_chat_id": chat_id,
+                "gateway_message_external_id": message_id,
+                "gateway_message_key": message_key,
+                "mail_message_id": mail_message.id,
+            }
+            try:
+                with self.env.cr.savepoint():
+                    alias_model.create(values)
+            except IntegrityError:
+                continue
 
 
     def _mark_outbound_message_status(self, record, status):

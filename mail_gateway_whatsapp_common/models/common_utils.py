@@ -1,8 +1,11 @@
+import base64
+import hashlib
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from markupsafe import Markup
-from odoo import fields
+from odoo import SUPERUSER_ID, api, fields
 from odoo.tools import html_escape
+from psycopg2 import IntegrityError
 
 class MailGatewayWhatsappCommonUtils:
     def _apply_message_timestamp(self, message, dto):
@@ -95,6 +98,16 @@ class MailGatewayWhatsappCommonUtils:
                 )
                 if existing:
                     return existing
+        existing = self._find_message_alias(
+            gateway, message_id, chat_id=chat_id, instance=instance
+        )
+        if existing:
+            return existing
+        existing = self._find_message_from_outbound_intent(
+            gateway, message_id, chat_id=chat_id, instance=instance
+        )
+        if existing:
+            return existing
         if "gateway_message_external_id" not in message_model._fields:
             return False
         domain = [("gateway_message_external_id", "=", message_id)]
@@ -118,6 +131,22 @@ class MailGatewayWhatsappCommonUtils:
                 )
                 if existing:
                     return existing
+        existing = self._find_message_alias(
+            gateway,
+            dto.message_id,
+            chat_id=dto.chat_id,
+            instance=dto.instance,
+        )
+        if existing:
+            return existing
+        existing = self._find_message_from_outbound_intent(
+            gateway,
+            dto.message_id,
+            chat_id=dto.chat_id,
+            instance=dto.instance,
+        )
+        if existing:
+            return existing
         domain = [
             ("gateway_message_external_id", "=", dto.message_id),
             ("gateway_type", "=", gateway.gateway_type),
@@ -127,6 +156,492 @@ class MailGatewayWhatsappCommonUtils:
         if dto.chat_id:
             domain.append(("gateway_chat_id", "=", dto.chat_id))
         return message_model.search(domain, limit=1)
+
+
+    def _find_message_alias(self, gateway, message_id, chat_id=None, instance=None):
+        message_id = (message_id or "").strip()
+        if not message_id or not gateway or "mail.gateway.message.alias" not in self.env:
+            return False
+        alias_model = self.env["mail.gateway.message.alias"].sudo()
+        message_key = self._build_message_key_from_values(
+            gateway, instance, chat_id, message_id
+        )
+        alias = False
+        if message_key:
+            alias = alias_model.search(
+                [("gateway_message_key", "=", message_key)], limit=1
+            )
+        if not alias:
+            domain = [
+                ("gateway_id", "=", gateway.id),
+                ("gateway_message_external_id", "=", message_id),
+            ]
+            if instance:
+                domain.append(("gateway_instance", "=", instance))
+            if chat_id:
+                domain.append(("gateway_chat_id", "=", chat_id))
+            alias = alias_model.search(domain, limit=1)
+        if alias and alias.mail_message_id:
+            return alias.mail_message_id.sudo()
+        return False
+
+
+    def _find_message_from_outbound_intent(
+        self, gateway, message_id, chat_id=None, instance=None
+    ):
+        message_id = (message_id or "").strip()
+        if (
+            not message_id
+            or not gateway
+            or "mail.gateway.outbound.intent" not in self.env
+        ):
+            return False
+        intent_model = self.env["mail.gateway.outbound.intent"].sudo()
+        domain = [
+            ("gateway_id", "=", gateway.id),
+            ("state", "in", ["pending", "sent", "matched"]),
+            "|",
+            ("outbound_message_external_id", "=", message_id),
+            ("inbound_message_external_id", "=", message_id),
+        ]
+        if instance:
+            domain.extend(
+                [
+                    "|",
+                    ("gateway_instance", "=", instance),
+                    ("gateway_instance", "=", False),
+                ]
+            )
+        if chat_id:
+            domain.append(("gateway_chat_id", "=", chat_id))
+        intent = intent_model.search(domain, order="id desc", limit=1)
+        if not intent or not intent.mail_message_ref_id:
+            return False
+        message = self.env["mail.message"].sudo().browse(intent.mail_message_ref_id).exists()
+        if not message:
+            return False
+        message_key = self._build_message_key_from_values(
+            gateway,
+            instance or intent.gateway_instance,
+            chat_id or intent.gateway_chat_id,
+            message_id,
+        )
+        if message_key and "mail.gateway.message.alias" in self.env:
+            alias_model = self.env["mail.gateway.message.alias"].sudo()
+            if not alias_model.search([("gateway_message_key", "=", message_key)], limit=1):
+                values = {
+                    "gateway_id": gateway.id,
+                    "gateway_instance": instance or intent.gateway_instance,
+                    "gateway_chat_id": chat_id or intent.gateway_chat_id,
+                    "gateway_message_external_id": message_id,
+                    "gateway_message_key": message_key,
+                    "mail_message_id": message.id,
+                }
+                try:
+                    with self.env.cr.savepoint():
+                        alias_model.create(values)
+                except IntegrityError:
+                    pass
+        return message
+
+
+    def _register_message_alias_from_dto(self, message, gateway, dto):
+        if (
+            not message
+            or not gateway
+            or not dto
+            or "mail.gateway.message.alias" not in self.env
+        ):
+            return
+        message_id = (dto.message_id or "").strip()
+        if not message_id:
+            return
+        message_key = self._build_message_key(gateway, dto)
+        if not message_key:
+            return
+        alias_model = self.env["mail.gateway.message.alias"].sudo()
+        existing = alias_model.search([("gateway_message_key", "=", message_key)], limit=1)
+        if existing:
+            return
+        values = {
+            "gateway_id": gateway.id,
+            "gateway_instance": dto.instance,
+            "gateway_chat_id": dto.chat_id,
+            "gateway_message_external_id": message_id,
+            "gateway_message_key": message_key,
+            "mail_message_id": message.id,
+        }
+        try:
+            with self.env.cr.savepoint():
+                alias_model.create(values)
+        except IntegrityError:
+            return
+
+
+    def _register_outbound_intents(self, gateway, record, dto):
+        if (
+            not gateway
+            or not record
+            or not dto
+            or "mail.gateway.outbound.intent" not in self.env
+        ):
+            return []
+        message = record.mail_message_id
+        if not message or not message.id:
+            return []
+        chat_id = (dto.chat_id or "").strip()
+        if not chat_id:
+            return []
+
+        values_list = []
+        sequence = 1
+        for attachment in dto.attachments or []:
+            if not isinstance(attachment, dict):
+                continue
+            fingerprint = self._attachment_fingerprint_from_outbound_payload(attachment)
+            values_list.append(
+                {
+                    "gateway_id": gateway.id,
+                    "gateway_instance": dto.instance or False,
+                    "gateway_chat_id": chat_id,
+                    "mail_message_ref_id": message.id,
+                    "mail_notification_ref_id": record.id,
+                    "intent_type": "attachment",
+                    "sequence": sequence,
+                    "attachment_name": fingerprint["name"],
+                    "attachment_size": fingerprint["size"],
+                    "attachment_sha1": fingerprint["sha1"],
+                    "attachment_mimetype": attachment.get("mimetype") or False,
+                    "expire_at": fields.Datetime.now() + timedelta(minutes=10),
+                }
+            )
+            sequence += 1
+
+        body_key = self._normalize_text_intent_key(dto.text)
+        if body_key:
+            values_list.append(
+                {
+                    "gateway_id": gateway.id,
+                    "gateway_instance": dto.instance or False,
+                    "gateway_chat_id": chat_id,
+                    "mail_message_ref_id": message.id,
+                    "mail_notification_ref_id": record.id,
+                    "intent_type": "text",
+                    "sequence": sequence,
+                    "body_key": body_key,
+                    "expire_at": fields.Datetime.now() + timedelta(minutes=10),
+                }
+            )
+
+        return self._create_outbound_intents_autonomous(record.id, values_list)
+
+
+    def _create_outbound_intents_autonomous(self, notification_id, values_list):
+        if not values_list or "mail.gateway.outbound.intent" not in self.env:
+            return []
+        with self.env.registry.cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, {})
+            intent_model = env["mail.gateway.outbound.intent"].sudo()
+            if notification_id:
+                old_domain = [
+                    ("mail_notification_ref_id", "=", notification_id),
+                    ("state", "in", ["pending", "sent"]),
+                ]
+                intent_model.search(old_domain).unlink()
+            intents = intent_model.create(values_list)
+            cr.commit()
+            return intents.ids
+
+
+    def _mark_outbound_intents_failed(self, intent_ids):
+        if not intent_ids or "mail.gateway.outbound.intent" not in self.env:
+            return
+        with self.env.registry.cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, {})
+            intents = env["mail.gateway.outbound.intent"].sudo().browse(intent_ids).exists()
+            if intents:
+                intents.write({"state": "failed"})
+            cr.commit()
+
+
+    def _mark_outbound_intents_sent(self, intent_ids, response_message_ids):
+        if not intent_ids or "mail.gateway.outbound.intent" not in self.env:
+            return
+        with self.env.registry.cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, {})
+            intents = (
+                env["mail.gateway.outbound.intent"]
+                .sudo()
+                .browse(intent_ids)
+                .exists()
+                .sorted(key=lambda intent: (intent.sequence, intent.id))
+            )
+            if intents:
+                for intent in intents:
+                    if intent.state != "matched":
+                        intent.state = "sent"
+                for index, message_id in enumerate(response_message_ids or []):
+                    if index >= len(intents):
+                        break
+                    intent = intents[index]
+                    if not message_id:
+                        continue
+                    intent.outbound_message_external_id = str(message_id).strip()
+            cr.commit()
+
+
+    def _find_pending_outbound_message_id(self, gateway, dto, body, attachments):
+        if (
+            not gateway
+            or not dto
+            or not dto.from_me
+            or "mail.gateway.outbound.intent" not in self.env
+        ):
+            return False
+        chat_id = (dto.chat_id or "").strip()
+        if not chat_id:
+            return False
+        intent_model = self.env["mail.gateway.outbound.intent"].sudo()
+        now = fields.Datetime.now()
+        domain = [
+            ("gateway_id", "=", gateway.id),
+            ("gateway_chat_id", "=", chat_id),
+            ("state", "in", ["pending", "sent", "matched"]),
+            (
+                "create_date",
+                ">=",
+                fields.Datetime.to_string(
+                    now - timedelta(minutes=3)
+                ),
+            ),
+        ]
+        if dto.instance:
+            domain.extend(
+                [
+                    "|",
+                    ("gateway_instance", "=", dto.instance),
+                    ("gateway_instance", "=", False),
+                ]
+            )
+        intents = intent_model.search(domain, order="id desc", limit=80)
+        if not intents:
+            return False
+
+        valid_intents = intents.filtered(
+            lambda intent: not intent.expire_at or intent.expire_at >= now
+        )
+        if not valid_intents:
+            return False
+
+        if attachments:
+            return self._match_pending_attachment_intents(valid_intents, dto, attachments)
+        body_key = self._normalize_text_intent_key(body)
+        if not body_key:
+            return False
+        text_intent = valid_intents.filtered(
+            lambda intent: intent.intent_type == "text" and intent.body_key == body_key
+        )[:1]
+        if not text_intent:
+            return False
+        text_intent.write(
+            {
+                "state": "matched",
+                "inbound_message_external_id": (dto.message_id or "").strip() or False,
+                "matched_at": fields.Datetime.now(),
+            }
+        )
+        return text_intent.mail_message_ref_id
+
+
+    def _match_pending_attachment_intents(self, intents, dto, attachments):
+        fingerprints = self._attachment_fingerprints_from_prepared(attachments)
+        if not fingerprints:
+            return False
+        used_intent_ids = set()
+        matched = intents.browse()
+
+        for fingerprint in fingerprints:
+            candidates = intents.filtered(
+                lambda intent: (
+                    intent.id not in used_intent_ids
+                    and intent.intent_type == "attachment"
+                    and self._intent_matches_fingerprint(intent, fingerprint)
+                )
+            )
+            if not candidates:
+                return False
+            candidate = candidates.sorted(key=lambda intent: intent.id, reverse=True)[:1]
+            matched |= candidate
+            used_intent_ids.add(candidate.id)
+
+        message_ids = set(matched.mapped("mail_message_ref_id"))
+        if len(message_ids) != 1:
+            return False
+        message_id = list(message_ids)[0]
+        matched.write(
+            {
+                "state": "matched",
+                "inbound_message_external_id": (dto.message_id or "").strip() or False,
+                "matched_at": fields.Datetime.now(),
+            }
+        )
+        return message_id
+
+
+    @staticmethod
+    def _intent_matches_fingerprint(intent, fingerprint):
+        if not intent or not fingerprint:
+            return False
+        if intent.attachment_sha1 and fingerprint.get("sha1"):
+            return intent.attachment_sha1 == fingerprint["sha1"]
+        return (
+            (intent.attachment_name or "") == (fingerprint.get("name") or "")
+            and int(intent.attachment_size or 0) == int(fingerprint.get("size") or 0)
+        )
+
+
+    def _attachment_fingerprint_from_outbound_payload(self, attachment):
+        name = self._normalize_attachment_name_for_match(attachment.get("name"))
+        payload = attachment.get("datas")
+        decoded_size = int(attachment.get("size") or 0)
+        digest = False
+        if payload:
+            try:
+                raw = base64.b64decode(payload)
+                decoded_size = decoded_size or len(raw)
+                digest = hashlib.sha1(raw).hexdigest()
+            except Exception:
+                digest = False
+        return {
+            "name": name,
+            "size": decoded_size,
+            "sha1": digest,
+        }
+
+
+    def _attachment_fingerprints_from_prepared(self, attachments):
+        fingerprints = []
+        for attachment in attachments or []:
+            if not attachment:
+                continue
+            name = self._normalize_attachment_name_for_match(attachment[0] if len(attachment) > 0 else "")
+            data = attachment[1] if len(attachment) > 1 else b""
+            data = data or b""
+            if isinstance(data, bytearray):
+                data = bytes(data)
+            if isinstance(data, str):
+                data = data.encode("utf-8")
+            size = len(data)
+            digest = hashlib.sha1(data).hexdigest() if data else False
+            fingerprints.append(
+                {
+                    "name": name,
+                    "size": size,
+                    "sha1": digest,
+                }
+            )
+        return fingerprints
+
+
+    @staticmethod
+    def _normalize_attachment_name_for_match(name):
+        return (name or "").strip().lower()
+
+
+    def _normalize_text_intent_key(self, body):
+        return self._normalize_body_for_dedupe(body)
+
+
+    def _find_recent_equivalent_message(
+        self, gateway, dto, channel, body, attachments, window_seconds=45
+    ):
+        """Best-effort dedupe for bursty fromMe media echoes with different ids."""
+        if not gateway or not dto or not channel or not dto.from_me:
+            return False
+        if not attachments:
+            return False
+        target_signature = self._attachment_signature_from_prepared(attachments)
+        if not target_signature:
+            return False
+        target_body = self._normalize_body_for_dedupe(body)
+        message_model = self.env["mail.message"].sudo()
+        domain = [
+            ("model", "=", "discuss.channel"),
+            ("res_id", "=", channel.id),
+            ("gateway_type", "=", gateway.gateway_type),
+            ("gateway_from_me", "=", True),
+            (
+                "create_date",
+                ">=",
+                fields.Datetime.to_string(
+                    fields.Datetime.now() - timedelta(seconds=window_seconds)
+                ),
+            ),
+        ]
+        candidates = message_model.search(domain, order="id desc", limit=25)
+        for candidate in candidates:
+            if (candidate.gateway_message_external_id or "").strip() == (dto.message_id or "").strip():
+                return candidate
+            if self._normalize_body_for_dedupe(candidate.body) != target_body:
+                continue
+            candidate_signature = self._attachment_signature_from_message(candidate)
+            if (
+                candidate_signature == target_signature
+                or self._is_attachment_signature_subset(target_signature, candidate_signature)
+            ):
+                return candidate
+        return False
+
+
+    @staticmethod
+    def _attachment_signature_from_prepared(attachments):
+        signature = []
+        for attachment in attachments or []:
+            if not attachment:
+                continue
+            name = (attachment[0] or "").strip().lower() if len(attachment) > 0 else ""
+            data = attachment[1] if len(attachment) > 1 else b""
+            size = len(data or b"")
+            signature.append((name, size))
+        signature.sort()
+        return signature
+
+
+    @staticmethod
+    def _attachment_signature_from_message(message):
+        signature = []
+        for attachment in message.attachment_ids:
+            signature.append(
+                (
+                    (attachment.name or "").strip().lower(),
+                    int(attachment.file_size or 0),
+                )
+            )
+        signature.sort()
+        return signature
+
+
+    @staticmethod
+    def _is_attachment_signature_subset(subset, superset):
+        if not subset:
+            return False
+        remaining = list(superset or [])
+        for item in subset:
+            if item in remaining:
+                remaining.remove(item)
+                continue
+            return False
+        return True
+
+
+    @staticmethod
+    def _normalize_body_for_dedupe(body):
+        body = str(body or "")
+        body = body.replace("&nbsp;", " ")
+        body = re.sub(r"<[^>]+>", "", body)
+        body = body.replace("\r\n", "\n").replace("\r", "\n")
+        body = re.sub(r"\s+", " ", body)
+        return body.strip()
 
 
     def _build_message_key(self, gateway, dto):

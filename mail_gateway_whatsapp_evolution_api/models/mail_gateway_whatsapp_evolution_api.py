@@ -182,7 +182,7 @@ class MailGatewayWhatsappEvolutionApi(models.AbstractModel):
         )
 
     def _build_contact_dto(self, update, gateway, data):
-        contact_jid = data.get("remoteJid")
+        contact_jid = self._get_chat_token(data) or data.get("remoteJid")
         contact_name = data.get("pushName")
         contact_pic = data.get("profilePicUrl")
         return NormalizedPayload(
@@ -199,7 +199,7 @@ class MailGatewayWhatsappEvolutionApi(models.AbstractModel):
         )
 
     def _build_chat_dto(self, update, gateway, data):
-        chat_id = data.get("remoteJid")
+        chat_id = self._get_chat_token(data) or data.get("remoteJid")
         return NormalizedPayload(
             provider="evolution",
             instance=self._instance_name(gateway),
@@ -507,16 +507,49 @@ class MailGatewayWhatsappEvolutionApi(models.AbstractModel):
         return name
 
     def _get_chat_token(self, data):
-        remote_jid, remote_jid_alt, participant_jid = self._extract_jids(data)
-        return remote_jid or remote_jid_alt or participant_jid
+        candidates = self._extract_jids(data)
+        best = None
+        best_rank = -1
+        for candidate in candidates:
+            rank = self._chat_jid_rank(candidate)
+            if rank > best_rank:
+                best = candidate
+                best_rank = rank
+        return best
 
     def _extract_jids(self, data):
+        data = data or {}
         key_data = data.get("key", {}) or {}
-        return (
+        candidates = [
             key_data.get("remoteJid"),
+            data.get("remoteJid"),
             key_data.get("remoteJidAlt"),
+            data.get("remoteJidAlt"),
             key_data.get("participant"),
-        )
+            data.get("participant"),
+        ]
+        seen = set()
+        result = []
+        for candidate in candidates:
+            candidate = (candidate or "").strip()
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            result.append(candidate)
+        return result
+
+    @staticmethod
+    def _chat_jid_rank(value):
+        value = str(value or "")
+        if value.endswith("@g.us"):
+            return 4
+        if value.endswith("@s.whatsapp.net") or value.endswith("@c.us"):
+            return 3
+        if value.endswith("@lid"):
+            return 2
+        if "@" in value:
+            return 1
+        return 0
 
     @staticmethod
     def _extract_sender_jids(key_data):

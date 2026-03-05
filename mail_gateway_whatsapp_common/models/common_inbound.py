@@ -34,6 +34,7 @@ class MailGatewayWhatsappCommonInbound:
         status_raw = (dto.status_raw or dto.status or "").strip()
         normalized = self._normalize_status(status_raw)
         if existing:
+            self._register_message_alias_from_dto(existing, gateway, dto)
             update_vals = {}
             webhook_log_id = self.env.context.get("gateway_webhook_log_id")
             if (
@@ -83,6 +84,28 @@ class MailGatewayWhatsappCommonInbound:
                 "message_id": existing.id,
             }
 
+        attachments = self._prepare_attachments(dto)
+        body = self._render_message_body(dto)
+        if not body and not attachments:
+            return {"status": "ignored", "reason": "empty_body"}
+
+        pending_message_id = self._find_pending_outbound_message_id(
+            gateway,
+            dto,
+            body,
+            attachments,
+        )
+        if pending_message_id:
+            pending_message = (
+                self.env["mail.message"].sudo().browse(pending_message_id).exists()
+            )
+            if pending_message:
+                self._register_message_alias_from_dto(pending_message, gateway, dto)
+            return {
+                "status": "duplicate",
+                "message_id": pending_message_id,
+            }
+
         author = author or self._resolve_author(gateway, dto)
         if not author:
             return {"status": "ignored", "reason": "author_not_found"}
@@ -95,10 +118,19 @@ class MailGatewayWhatsappCommonInbound:
         self._apply_contact_metadata(gateway, dto, channel=channel)
         self._ensure_guest_member(channel, author)
 
-        attachments = self._prepare_attachments(dto)
-        body = self._render_message_body(dto)
-        if not body and not attachments:
-            return {"status": "ignored", "reason": "empty_body"}
+        equivalent = self._find_recent_equivalent_message(
+            gateway,
+            dto,
+            channel,
+            body,
+            attachments,
+        )
+        if equivalent:
+            self._register_message_alias_from_dto(equivalent, gateway, dto)
+            return {
+                "status": "duplicate",
+                "message_id": equivalent.id,
+            }
         parent_message = self._find_quoted_message(gateway, dto)
 
         ctx = dict(self.env.context or {})

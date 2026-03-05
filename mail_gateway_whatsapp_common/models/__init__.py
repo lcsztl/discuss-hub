@@ -5,6 +5,8 @@ from . import common_inbound
 from . import common_outbound
 from . import common_utils
 from . import mail_gateway_whatsapp_common
+from . import mail_gateway_message_alias
+from . import mail_gateway_outbound_intent
 from . import discuss_channel
 from . import mail_guest
 from . import mail_message

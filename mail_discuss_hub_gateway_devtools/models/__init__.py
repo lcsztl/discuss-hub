@@ -6,7 +6,6 @@ from . import devtools_settings
 from . import timeline_wizard
 from . import common_logging
 from . import evolution_api_logging
-from . import waha_logging
 from . import evolution_api_instance
 from . import error_panel_wizard
 from . import connection_simulator_wizard

@@ -1,9 +1,99 @@
 import base64
+import re
 import requests
 from odoo import Command
 from psycopg2 import IntegrityError
 
 class MailGatewayWhatsappCommonChannel:
+    def _channel_token_rank(self, token):
+        token = str(token or "")
+        if token.endswith("@g.us"):
+            return 4
+        if token.endswith("@s.whatsapp.net") or token.endswith("@c.us"):
+            return 3
+        if token.endswith("@lid"):
+            return 2
+        if "@" in token:
+            return 1
+        return 0
+
+    def _expand_channel_token_aliases(self, token):
+        token = (token or "").strip()
+        if not token:
+            return []
+        result = [token]
+        local = token.split("@", 1)[0] if "@" in token else token
+        digits = re.sub(r"\D", "", local)
+        if not digits:
+            return result
+        if token.endswith("@s.whatsapp.net"):
+            result.extend([f"{digits}@c.us", digits])
+        elif token.endswith("@c.us"):
+            result.extend([f"{digits}@s.whatsapp.net", digits])
+        elif "@" not in token:
+            result.extend([f"{digits}@s.whatsapp.net", f"{digits}@c.us"])
+        return result
+
+    def _channel_token_candidates(self, dto):
+        raw_candidates = [
+            (dto.chat_id or "").strip(),
+            (dto.contact_jid or "").strip(),
+            (dto.sender_jid or "").strip(),
+            (dto.sender_jid_alt or "").strip(),
+            (dto.sender_participant_jid or "").strip(),
+        ]
+        raw_candidates = [token for token in raw_candidates if token]
+        if not raw_candidates:
+            return []
+
+        if dto.is_group:
+            group_candidates = [
+                token for token in raw_candidates if token.endswith("@g.us")
+            ]
+            if group_candidates:
+                raw_candidates = group_candidates
+        else:
+            raw_candidates = [
+                token for token in raw_candidates if not token.endswith("@g.us")
+            ]
+            has_phone_jid = any(
+                token.endswith("@s.whatsapp.net") or token.endswith("@c.us")
+                for token in raw_candidates
+            )
+            if has_phone_jid:
+                raw_candidates = [
+                    token for token in raw_candidates if not token.endswith("@lid")
+                ]
+
+        ranked = sorted(
+            raw_candidates,
+            key=lambda token: self._channel_token_rank(token),
+            reverse=True,
+        )
+        expanded = []
+        for token in ranked:
+            expanded.extend(self._expand_channel_token_aliases(token))
+
+        seen = set()
+        result = []
+        for token in expanded:
+            token = (token or "").strip()
+            if not token or token in seen:
+                continue
+            seen.add(token)
+            result.append(token)
+        return result
+
+    def _find_channel_by_tokens(self, gateway, tokens):
+        if not gateway:
+            return False
+        channel_model = self.env["discuss.channel"]
+        for token in tokens or []:
+            channel_id = gateway._get_channel_id(token)
+            if channel_id:
+                return channel_model.browse(channel_id)
+        return False
+
     def _get_channel_by_chat_id(self, gateway, chat_id):
         if not gateway or not chat_id:
             return False
@@ -15,13 +105,13 @@ class MailGatewayWhatsappCommonChannel:
 
     def _handle_chat_update(self, gateway, dto, channel, author=None):
         """Update channel metadata such as name and unread count."""
-        chat_id = (dto.chat_id or "").strip()
-        if not chat_id:
+        chat_tokens = self._channel_token_candidates(dto)
+        if not chat_tokens:
             return {"status": "ignored", "reason": "missing_chat_id"}
-        channel_id = gateway._get_channel_id(chat_id)
-        if not channel_id:
+        channel = self._find_channel_by_tokens(gateway, chat_tokens)
+        if not channel:
             return {"status": "ignored", "reason": "channel_not_found"}
-        channel = self.env["discuss.channel"].browse(channel_id)
+        chat_id = chat_tokens[0]
         update_vals = {}
         if dto.chat_name and self._should_update_channel_name(channel, dto, chat_id):
             update_vals["name"] = dto.chat_name.strip()
@@ -38,12 +128,11 @@ class MailGatewayWhatsappCommonChannel:
 
     def _get_or_create_channel(self, gateway, dto, author):
         """Find or create the gateway channel for a chat_id."""
-        chat_id = (dto.chat_id or "").strip()
-        if not chat_id:
+        chat_tokens = self._channel_token_candidates(dto)
+        if not chat_tokens:
             return False
-        channel_id = gateway._get_channel_id(chat_id)
-        if channel_id:
-            channel = self.env["discuss.channel"].browse(channel_id)
+        channel = self._find_channel_by_tokens(gateway, chat_tokens)
+        if channel:
             if gateway and hasattr(gateway, "_reopen_channel_if_needed"):
                 reopened_by = (
                     gateway.webhook_user_id.partner_id
@@ -54,7 +143,8 @@ class MailGatewayWhatsappCommonChannel:
                     channel, reopened_by=reopened_by
                 )
             return channel
-        channel_name = self._get_channel_name(dto)
+        chat_id = chat_tokens[0]
+        channel_name = self._get_channel_name(dto, chat_id=chat_id)
         members = self._build_channel_members(gateway, author)
         channel_env = self.env["discuss.channel"].sudo()
         channel_env = channel_env.with_user(gateway.webhook_user_id or self.env.user)
@@ -165,9 +255,9 @@ class MailGatewayWhatsappCommonChannel:
         return False
 
 
-    def _get_channel_name(self, dto):
+    def _get_channel_name(self, dto, chat_id=None):
         """Compute a human-friendly channel name."""
-        chat_id = (dto.chat_id or "").strip()
+        chat_id = (chat_id or dto.chat_id or "").strip()
         if not chat_id:
             return (dto.sender_name or "").strip()
         if self._is_group_chat(chat_id):

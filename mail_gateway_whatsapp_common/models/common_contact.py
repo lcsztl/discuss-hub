@@ -312,11 +312,28 @@ class MailGatewayWhatsappCommonContact:
             if has_phone_jid:
                 tokens = [token for token in tokens if not token.endswith("@lid")]
             return tokens
-        if dto.contact_jid:
-            return [(dto.contact_jid or "").strip()]
-        if dto.chat_id:
-            return [(dto.chat_id or "").strip()]
-        return []
+        tokens = [
+            (dto.contact_jid or "").strip(),
+            (dto.chat_id or "").strip(),
+            (dto.sender_jid_alt or "").strip(),
+            (dto.sender_participant_jid or "").strip(),
+            (dto.sender_jid or "").strip(),
+        ]
+        tokens = [token for token in tokens if token and not token.endswith("@g.us")]
+        has_phone_jid = any(
+            token.endswith("@s.whatsapp.net") or token.endswith("@c.us")
+            for token in tokens
+        )
+        if has_phone_jid:
+            tokens = [token for token in tokens if not token.endswith("@lid")]
+        seen = set()
+        result = []
+        for token in tokens:
+            if token in seen:
+                continue
+            seen.add(token)
+            result.append(token)
+        return result
 
 
     def _normalize_phone_token(self, token):
