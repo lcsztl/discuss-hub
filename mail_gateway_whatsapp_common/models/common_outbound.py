@@ -4,6 +4,7 @@ import re
 from odoo.addons.base.models.ir_mail_server import MailDeliveryException
 from odoo.tools import html2plaintext
 from psycopg2 import IntegrityError
+from psycopg2.errors import SerializationFailure
 from .outbound_payload import OutboundPayload
 
 class MailGatewayWhatsappCommonOutbound:
@@ -405,8 +406,9 @@ class MailGatewayWhatsappCommonOutbound:
             update_vals["gateway_sender_name"] = sender_name
         try:
             # Outbound and inbound can race to persist the same gateway_message_key.
-            # Isolate this write so a duplicate key does not abort the caller transaction.
-            with self.env.cr.savepoint():
+            # Avoid flushing unrelated pending writes that may trigger concurrent
+            # updates on discuss_channel during invoice send.
+            with self.env.cr.savepoint(flush=False):
                 mail_message.write(update_vals)
         except IntegrityError:
             if message_key:
@@ -426,6 +428,23 @@ class MailGatewayWhatsappCommonOutbound:
                     record.sudo().write({"gateway_message_id": message_id})
                     return
             raise
+        except SerializationFailure:
+            self._logger.warning(
+                "Serialization failure while updating gateway metadata for "
+                "mail.message %s (gateway message id %s).",
+                mail_message.id,
+                message_id,
+                exc_info=True,
+            )
+            try:
+                record.sudo().write({"gateway_message_id": message_id})
+            except Exception:
+                self._logger.debug(
+                    "Unable to persist gateway_message_id on notification %s.",
+                    record.id if record else None,
+                    exc_info=True,
+                )
+            return
         self._register_outgoing_message_aliases(
             mail_message,
             gateway,
@@ -541,7 +560,7 @@ class MailGatewayWhatsappCommonOutbound:
                 "mail_message_id": mail_message.id,
             }
             try:
-                with self.env.cr.savepoint():
+                with self.env.cr.savepoint(flush=False):
                     alias_model.create(values)
             except IntegrityError:
                 continue
