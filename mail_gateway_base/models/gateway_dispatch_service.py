@@ -243,7 +243,9 @@ class MailGatewayDispatchService(models.AbstractModel):
                 _("Message body or at least one attachment is required.")
             )
 
-        message = channel.with_user(send_user).message_post(
+        message = channel.with_user(send_user).with_context(
+            mail_gateway_background_post=True
+        ).message_post(
             author_id=author_partner.id if author_partner else False,
             body=normalized_body or False,
             attachments=attachments or [],

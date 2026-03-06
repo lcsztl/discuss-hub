@@ -110,14 +110,38 @@ class MailGatewayWhatsappCommonUtils:
             return existing
         if "gateway_message_external_id" not in message_model._fields:
             return False
-        domain = [("gateway_message_external_id", "=", message_id)]
+        base_domain = [("gateway_message_external_id", "=", message_id)]
         if "gateway_type" in message_model._fields and gateway:
-            domain.append(("gateway_type", "=", gateway.gateway_type))
+            base_domain.append(("gateway_type", "=", gateway.gateway_type))
+
+        strict_domain = list(base_domain)
         if instance and "gateway_instance" in message_model._fields:
-            domain.append(("gateway_instance", "=", instance))
+            strict_domain.append(("gateway_instance", "=", instance))
         if chat_id and "gateway_chat_id" in message_model._fields:
-            domain.append(("gateway_chat_id", "=", chat_id))
-        return message_model.search(domain, limit=1)
+            strict_domain.append(("gateway_chat_id", "=", chat_id))
+        existing = message_model.search(strict_domain, limit=1)
+        if existing:
+            return existing
+
+        # Evolution and similar providers may omit instance on outbound and
+        # include it on inbound echo. Accept empty instance as a valid match.
+        if instance and "gateway_instance" in message_model._fields:
+            relaxed_instance_domain = list(base_domain)
+            relaxed_instance_domain.append(("gateway_instance", "in", [instance, False]))
+            if chat_id and "gateway_chat_id" in message_model._fields:
+                relaxed_instance_domain.append(("gateway_chat_id", "=", chat_id))
+            existing = message_model.search(relaxed_instance_domain, limit=1)
+            if existing:
+                return existing
+
+        if chat_id and "gateway_chat_id" in message_model._fields:
+            chat_only_domain = list(base_domain)
+            chat_only_domain.append(("gateway_chat_id", "=", chat_id))
+            existing = message_model.search(chat_only_domain, limit=1)
+            if existing:
+                return existing
+
+        return message_model.search(base_domain, limit=1)
 
 
     def _find_existing_message(self, gateway, dto, message_key=None):
@@ -147,15 +171,39 @@ class MailGatewayWhatsappCommonUtils:
         )
         if existing:
             return existing
-        domain = [
+        base_domain = [
             ("gateway_message_external_id", "=", dto.message_id),
             ("gateway_type", "=", gateway.gateway_type),
         ]
+
+        strict_domain = list(base_domain)
         if dto.instance:
-            domain.append(("gateway_instance", "=", dto.instance))
+            strict_domain.append(("gateway_instance", "=", dto.instance))
         if dto.chat_id:
-            domain.append(("gateway_chat_id", "=", dto.chat_id))
-        return message_model.search(domain, limit=1)
+            strict_domain.append(("gateway_chat_id", "=", dto.chat_id))
+        existing = message_model.search(strict_domain, limit=1)
+        if existing:
+            return existing
+
+        if dto.instance:
+            relaxed_instance_domain = list(base_domain)
+            relaxed_instance_domain.append(
+                ("gateway_instance", "in", [dto.instance, False])
+            )
+            if dto.chat_id:
+                relaxed_instance_domain.append(("gateway_chat_id", "=", dto.chat_id))
+            existing = message_model.search(relaxed_instance_domain, limit=1)
+            if existing:
+                return existing
+
+        if dto.chat_id:
+            chat_only_domain = list(base_domain)
+            chat_only_domain.append(("gateway_chat_id", "=", dto.chat_id))
+            existing = message_model.search(chat_only_domain, limit=1)
+            if existing:
+                return existing
+
+        return message_model.search(base_domain, limit=1)
 
 
     def _find_message_alias(self, gateway, message_id, chat_id=None, instance=None):
@@ -172,15 +220,30 @@ class MailGatewayWhatsappCommonUtils:
                 [("gateway_message_key", "=", message_key)], limit=1
             )
         if not alias:
-            domain = [
+            base_domain = [
                 ("gateway_id", "=", gateway.id),
                 ("gateway_message_external_id", "=", message_id),
             ]
+            strict_domain = list(base_domain)
             if instance:
-                domain.append(("gateway_instance", "=", instance))
+                strict_domain.append(("gateway_instance", "=", instance))
             if chat_id:
-                domain.append(("gateway_chat_id", "=", chat_id))
-            alias = alias_model.search(domain, limit=1)
+                strict_domain.append(("gateway_chat_id", "=", chat_id))
+            alias = alias_model.search(strict_domain, limit=1)
+            if not alias and instance:
+                relaxed_instance_domain = list(base_domain)
+                relaxed_instance_domain.append(
+                    ("gateway_instance", "in", [instance, False])
+                )
+                if chat_id:
+                    relaxed_instance_domain.append(("gateway_chat_id", "=", chat_id))
+                alias = alias_model.search(relaxed_instance_domain, limit=1)
+            if not alias and chat_id:
+                chat_only_domain = list(base_domain)
+                chat_only_domain.append(("gateway_chat_id", "=", chat_id))
+                alias = alias_model.search(chat_only_domain, limit=1)
+            if not alias:
+                alias = alias_model.search(base_domain, limit=1)
         if alias and alias.mail_message_id:
             return alias.mail_message_id.sudo()
         return False
@@ -639,6 +702,12 @@ class MailGatewayWhatsappCommonUtils:
     def _normalize_body_for_dedupe(body):
         body = str(body or "")
         body = body.replace("&nbsp;", " ")
+        body = re.sub(r"(?is)<\s*br\s*/?\s*>", "\n", body)
+        body = re.sub(
+            r"(?is)</?\s*(?:p|div|section|article|blockquote|li|ul|ol|tr|table|h[1-6])\b[^>]*>",
+            "\n",
+            body,
+        )
         body = re.sub(r"<[^>]+>", "", body)
         body = body.replace("\r\n", "\n").replace("\r", "\n")
         body = re.sub(r"\s+", " ", body)

@@ -269,13 +269,23 @@ class AccountMoveSend(models.AbstractModel):
             try:
                 with self.env.cr.savepoint(flush=False):
                     self._run_single_gateway_send_job(job)
+                    # Flush inside the savepoint so serialization conflicts are
+                    # handled as a per-job failure instead of escaping at commit.
+                    self.env.cr.flush()
             except Exception as err:
                 _logger.exception(
                     "Gateway send job failed for invoice ID %s.",
                     job.get("move_id"),
                 )
-                with self.env.cr.savepoint(flush=False):
-                    self._log_gateway_send_job_error(job.get("move_id"), str(err))
+                try:
+                    with self.env.cr.savepoint(flush=False):
+                        self._log_gateway_send_job_error(job.get("move_id"), str(err))
+                        self.env.cr.flush()
+                except Exception:
+                    _logger.exception(
+                        "Unable to persist gateway job failure log for invoice ID %s.",
+                        job.get("move_id"),
+                    )
 
     @api.model
     def _run_single_gateway_send_job(self, job):
@@ -404,6 +414,13 @@ class AccountMoveSend(models.AbstractModel):
         @self.env.cr.postcommit.add
         def _send_gateway_after_commit():
             registry = Registry(dbname)
-            with registry.cursor() as cr:
-                env = api.Environment(cr, SUPERUSER_ID, context)
-                env["account.move.send"]._run_gateway_send_jobs(jobs)
+            for job in jobs:
+                try:
+                    with registry.cursor() as cr:
+                        env = api.Environment(cr, SUPERUSER_ID, context)
+                        env["account.move.send"]._run_gateway_send_jobs([job])
+                except Exception:
+                    _logger.exception(
+                        "Post-commit gateway send failed for invoice ID %s.",
+                        job.get("move_id"),
+                    )
