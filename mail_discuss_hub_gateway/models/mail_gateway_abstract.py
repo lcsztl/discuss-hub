@@ -39,7 +39,7 @@ class MailGatewayAbstract(models.AbstractModel):
     def _get_channel(self, gateway, token, update, force_create=False):
         channel = super()._get_channel(gateway, token, update, force_create=force_create)
         author = self._get_author(gateway, update)
-        self._ensure_gateway_channel_members(channel, gateway, author=author)
+        self._ensure_gateway_channel_members(channel, author=author)
         if (
             channel
             and gateway
@@ -56,40 +56,23 @@ class MailGatewayAbstract(models.AbstractModel):
             )
         return channel
 
-    def _gateway_channel_member_targets(self, gateway, author):
+    def _gateway_channel_member_targets(self, author):
         partner_ids = set()
         guest_ids = set()
-        auto_users = (
-            gateway._get_auto_assign_users()
-            if hasattr(gateway, "_get_auto_assign_users")
-            else gateway.member_ids
-        )
-        for user in auto_users:
-            if user.partner_id:
-                partner_ids.add(user.partner_id.id)
-
-        webhook_partner = (
-            gateway.webhook_user_id.partner_id
-            if gateway and gateway.webhook_user_id
-            else False
-        )
         if author and author._name == "res.partner":
-            partner_ids.add(author.id)
+            internal_users = author.user_ids.filtered(lambda user: user._is_internal())
+            if not internal_users:
+                partner_ids.add(author.id)
         elif author and author._name == "mail.guest":
             member_model = self.env["discuss.channel.member"]
             if "guest_id" in member_model._fields:
                 guest_ids.add(author.id)
-
-        # Keep at least one internal member when no auto users are configured.
-        if not partner_ids and webhook_partner:
-            partner_ids.add(webhook_partner.id)
-
         return sorted(partner_ids), sorted(guest_ids)
 
-    def _ensure_gateway_channel_members(self, channel, gateway, author=None):
-        if not channel or not gateway:
+    def _ensure_gateway_channel_members(self, channel, author=None):
+        if not channel:
             return
-        partner_ids, guest_ids = self._gateway_channel_member_targets(gateway, author)
+        partner_ids, guest_ids = self._gateway_channel_member_targets(author)
         if not partner_ids and not guest_ids:
             return
         existing_partner_ids = set(channel.channel_member_ids.mapped("partner_id").ids)
@@ -106,7 +89,7 @@ class MailGatewayAbstract(models.AbstractModel):
 
     def _get_channel_vals(self, gateway, token, update):
         author = self._get_author(gateway, update)
-        partner_ids, guest_ids = self._gateway_channel_member_targets(gateway, author)
+        partner_ids, guest_ids = self._gateway_channel_member_targets(author)
         members = [
             Command.create({"partner_id": partner_id, "unpin_dt": False})
             for partner_id in partner_ids

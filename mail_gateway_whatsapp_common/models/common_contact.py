@@ -22,6 +22,84 @@ class MailGatewayWhatsappCommonContact:
             return
         member_model.create({"channel_id": channel.id, "guest_id": author.id, "unpin_dt": False})
 
+    def _destination_token_candidates(self, destination):
+        destination = (destination or "").strip()
+        if not destination:
+            return []
+        expand_aliases = getattr(self, "_expand_channel_token_aliases", None)
+        tokens = expand_aliases(destination) if callable(expand_aliases) else [destination]
+        phone = self._normalize_phone_token(destination)
+        if phone:
+            for token in (phone, f"{phone}@s.whatsapp.net", f"{phone}@c.us"):
+                if token not in tokens:
+                    tokens.append(token)
+        return tokens
+
+    def _phone_from_tokens(self, token_candidates):
+        for token in token_candidates or []:
+            phone = self._normalize_phone_token(token)
+            if phone:
+                return phone
+        return False
+
+    def _find_partner_for_tokens(self, gateway, token_candidates):
+        phone = self._phone_from_tokens(token_candidates)
+        partner = self._find_partner_by_gateway_channel(gateway, phone)
+        if partner:
+            return partner
+        partner = self._find_partner_by_partner_fields(phone, token_candidates)
+        if partner:
+            return partner
+        if phone:
+            partner = self._find_partner_by_normalized_phone(phone)
+            if partner:
+                return partner
+        return False
+
+    def _get_or_create_guest_from_tokens(self, token_candidates):
+        phone = self._phone_from_tokens(token_candidates)
+        if not phone:
+            return False
+        primary_token = next((token for token in token_candidates or [] if token), False)
+        guest = self._find_guest_by_phone(None, phone=phone)
+        if guest:
+            update_vals = {}
+            if primary_token and "gateway_token" in guest._fields:
+                if guest.gateway_token != primary_token:
+                    update_vals["gateway_token"] = primary_token
+            if "gateway_phone" in guest._fields and not guest.gateway_phone:
+                update_vals["gateway_phone"] = phone
+            if update_vals:
+                guest.write(update_vals)
+            return guest
+        guest_model = self.env["mail.guest"].sudo()
+        guest_name = self._format_chat_id(primary_token or phone)
+        create_vals = {"name": guest_name or phone, "gateway_phone": phone}
+        if primary_token and "gateway_token" in guest_model._fields:
+            create_vals["gateway_token"] = primary_token
+        return guest_model.create(create_vals)
+
+    def _ensure_channel_destination_member(self, channel, gateway, token_candidates):
+        if not channel:
+            return False
+        if isinstance(token_candidates, str):
+            token_candidates = self._destination_token_candidates(token_candidates)
+        else:
+            token_candidates = list(token_candidates or [])
+        if not token_candidates:
+            return False
+        author = self._find_partner_for_tokens(gateway, token_candidates)
+        if not author:
+            author = self._get_or_create_guest_from_tokens(token_candidates)
+        if not author:
+            return False
+        ensure_members = getattr(self, "_ensure_channel_members", None)
+        if ensure_members:
+            ensure_members(channel, gateway, author=author)
+        else:
+            self._ensure_guest_member(channel, author)
+        return author
+
 
     def _handle_contact_update(self, gateway, dto, channel, author=None):
         """Sync guest details and optional avatar based on contact updates."""

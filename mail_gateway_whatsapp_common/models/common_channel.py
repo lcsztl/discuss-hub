@@ -133,7 +133,7 @@ class MailGatewayWhatsappCommonChannel:
             return False
         channel = self._find_channel_by_tokens(gateway, chat_tokens)
         if channel:
-            self._ensure_channel_members(channel, gateway, author=author)
+            self._ensure_channel_members(channel, author=author)
             if gateway and hasattr(gateway, "_reopen_channel_if_needed"):
                 reopened_by = (
                     gateway.webhook_user_id.partner_id
@@ -169,7 +169,7 @@ class MailGatewayWhatsappCommonChannel:
             if not channel_id:
                 raise
             channel = self.env["discuss.channel"].browse(channel_id)
-        self._ensure_channel_members(channel, gateway, author=author)
+        self._ensure_channel_members(channel, author=author)
         channel._broadcast(channel.channel_member_ids.mapped("partner_id").ids)
         if gateway and hasattr(gateway, "_reopen_channel_if_needed"):
             reopened_by = (
@@ -183,40 +183,23 @@ class MailGatewayWhatsappCommonChannel:
         return channel
 
 
-    def _channel_member_targets(self, gateway, author):
+    def _channel_member_targets(self, author):
         partner_ids = set()
         guest_ids = set()
-        auto_users = (
-            gateway._get_auto_assign_users()
-            if hasattr(gateway, "_get_auto_assign_users")
-            else gateway.member_ids
-        )
-        for user in auto_users:
-            if user.partner_id:
-                partner_ids.add(user.partner_id.id)
-
-        webhook_partner = (
-            gateway.webhook_user_id.partner_id
-            if gateway and gateway.webhook_user_id
-            else False
-        )
         if author and author._name == "res.partner":
-            partner_ids.add(author.id)
+            internal_users = author.user_ids.filtered(lambda user: user._is_internal())
+            if not internal_users:
+                partner_ids.add(author.id)
         elif author and author._name == "mail.guest":
             member_model = self.env["discuss.channel.member"]
             if "guest_id" in member_model._fields:
                 guest_ids.add(author.id)
-
-        # Keep at least one internal member when no auto users are configured.
-        if not partner_ids and webhook_partner:
-            partner_ids.add(webhook_partner.id)
-
         return sorted(partner_ids), sorted(guest_ids)
 
 
     def _build_channel_members(self, gateway, author):
         """Add gateway members and the author to the channel."""
-        partner_ids, guest_ids = self._channel_member_targets(gateway, author)
+        partner_ids, guest_ids = self._channel_member_targets(author)
         members = [
             Command.create({"partner_id": partner_id, "unpin_dt": False})
             for partner_id in partner_ids
@@ -230,10 +213,10 @@ class MailGatewayWhatsappCommonChannel:
         return members
 
 
-    def _ensure_channel_members(self, channel, gateway, author=None):
+    def _ensure_channel_members(self, channel, gateway=None, author=None):
         if not channel:
             return
-        partner_ids, guest_ids = self._channel_member_targets(gateway, author)
+        partner_ids, guest_ids = self._channel_member_targets(author)
         if not partner_ids and not guest_ids:
             return
         existing_partner_ids = set(channel.channel_member_ids.mapped("partner_id").ids)

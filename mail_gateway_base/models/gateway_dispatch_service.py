@@ -132,12 +132,30 @@ class MailGatewayDispatchService(models.AbstractModel):
     ):
         if not gateway:
             raise ValidationError(_("Gateway is required."))
+        dispatcher = False
+        model_name = f"mail.gateway.{gateway.gateway_type}"
+        if model_name in self.env:
+            dispatcher = self.env[model_name].sudo()
+            if company_id:
+                dispatcher = dispatcher.with_company(company_id)
+        member_dispatcher = dispatcher
+        if (
+            dispatcher
+            and getattr(dispatcher, "_uses_gateway_common", False)
+            and "mail.gateway.whatsapp.common" in self.env
+        ):
+            member_dispatcher = self.env["mail.gateway.whatsapp.common"].sudo()
+            if company_id:
+                member_dispatcher = member_dispatcher.with_company(company_id)
 
         include_inactive = self._include_inactive_channels(gateway)
         channel = self._find_channel(
             gateway, chat_tokens, include_inactive=include_inactive
         )
         if channel:
+            ensure_member = getattr(member_dispatcher, "_ensure_channel_destination_member", None)
+            if callable(ensure_member):
+                ensure_member(channel, gateway.sudo(), chat_tokens)
             reopened_by = self._default_reopened_by(
                 gateway, author_partner=author_partner
             )
@@ -147,15 +165,10 @@ class MailGatewayDispatchService(models.AbstractModel):
             raise ValidationError(_("Recipient destination is invalid."))
 
         token = chat_tokens[0]
-        model_name = f"mail.gateway.{gateway.gateway_type}"
-        if model_name not in self.env:
+        if not dispatcher:
             raise ValidationError(
                 _("Gateway type '%s' is not supported.") % (gateway.gateway_type or "")
             )
-
-        dispatcher = self.env[model_name].sudo()
-        if company_id:
-            dispatcher = dispatcher.with_company(company_id)
 
         with self.env.cr.savepoint():
             try:
@@ -173,6 +186,9 @@ class MailGatewayDispatchService(models.AbstractModel):
             raise ValidationError(
                 _("Unable to create/find gateway channel for '%s'.") % token
             )
+        ensure_member = getattr(member_dispatcher, "_ensure_channel_destination_member", None)
+        if callable(ensure_member):
+            ensure_member(channel, gateway.sudo(), chat_tokens)
 
         reopened_by = self._default_reopened_by(gateway, author_partner=author_partner)
         return self._reopen_channel_if_needed(gateway, channel, reopened_by)
