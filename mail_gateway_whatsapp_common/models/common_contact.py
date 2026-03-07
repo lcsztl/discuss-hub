@@ -2,8 +2,15 @@ import re
 
 class MailGatewayWhatsappCommonContact:
     def _ensure_guest_member(self, channel, author):
-        """Ensure a guest author is a member of the channel."""
-        if not channel or not author or author._name != "mail.guest":
+        """Ensure the message author is a member of the channel."""
+        if not channel or not author:
+            return
+        gateway = channel.gateway_id if "gateway_id" in channel._fields else False
+        ensure_members = getattr(self, "_ensure_channel_members", None)
+        if ensure_members:
+            ensure_members(channel, gateway, author=author)
+            return
+        if author._name != "mail.guest":
             return
         member_model = self.env["discuss.channel.member"].sudo()
         if "guest_id" not in member_model._fields:

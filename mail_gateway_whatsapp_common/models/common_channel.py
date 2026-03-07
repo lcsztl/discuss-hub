@@ -133,6 +133,7 @@ class MailGatewayWhatsappCommonChannel:
             return False
         channel = self._find_channel_by_tokens(gateway, chat_tokens)
         if channel:
+            self._ensure_channel_members(channel, gateway, author=author)
             if gateway and hasattr(gateway, "_reopen_channel_if_needed"):
                 reopened_by = (
                     gateway.webhook_user_id.partner_id
@@ -168,6 +169,7 @@ class MailGatewayWhatsappCommonChannel:
             if not channel_id:
                 raise
             channel = self.env["discuss.channel"].browse(channel_id)
+        self._ensure_channel_members(channel, gateway, author=author)
         channel._broadcast(channel.channel_member_ids.mapped("partner_id").ids)
         if gateway and hasattr(gateway, "_reopen_channel_if_needed"):
             reopened_by = (
@@ -181,9 +183,9 @@ class MailGatewayWhatsappCommonChannel:
         return channel
 
 
-    def _build_channel_members(self, gateway, author):
-        """Add gateway members and the author to the channel."""
-        members = []
+    def _channel_member_targets(self, gateway, author):
+        partner_ids = set()
+        guest_ids = set()
         auto_users = (
             gateway._get_auto_assign_users()
             if hasattr(gateway, "_get_auto_assign_users")
@@ -191,31 +193,60 @@ class MailGatewayWhatsappCommonChannel:
         )
         for user in auto_users:
             if user.partner_id:
-                members.append(
-                    Command.create(
-                        {
-                            "partner_id": user.partner_id.id,
-                            "unpin_dt": False,
-                        }
-                    )
-                )
+                partner_ids.add(user.partner_id.id)
+
+        webhook_partner = (
+            gateway.webhook_user_id.partner_id
+            if gateway and gateway.webhook_user_id
+            else False
+        )
         if author and author._name == "res.partner":
-            webhook_partner = (
-                gateway.webhook_user_id.partner_id
-                if gateway and gateway.webhook_user_id
-                else False
-            )
-            if not webhook_partner or author.id != webhook_partner.id:
-                members.append(
-                    Command.create({"partner_id": author.id, "unpin_dt": False})
-                )
+            partner_ids.add(author.id)
         elif author and author._name == "mail.guest":
             member_model = self.env["discuss.channel.member"]
             if "guest_id" in member_model._fields:
-                members.append(
-                    Command.create({"guest_id": author.id, "unpin_dt": False})
-                )
+                guest_ids.add(author.id)
+
+        # Keep at least one internal member when no auto users are configured.
+        if not partner_ids and webhook_partner:
+            partner_ids.add(webhook_partner.id)
+
+        return sorted(partner_ids), sorted(guest_ids)
+
+
+    def _build_channel_members(self, gateway, author):
+        """Add gateway members and the author to the channel."""
+        partner_ids, guest_ids = self._channel_member_targets(gateway, author)
+        members = [
+            Command.create({"partner_id": partner_id, "unpin_dt": False})
+            for partner_id in partner_ids
+        ]
+        members.extend(
+            [
+                Command.create({"guest_id": guest_id, "unpin_dt": False})
+                for guest_id in guest_ids
+            ]
+        )
         return members
+
+
+    def _ensure_channel_members(self, channel, gateway, author=None):
+        if not channel:
+            return
+        partner_ids, guest_ids = self._channel_member_targets(gateway, author)
+        if not partner_ids and not guest_ids:
+            return
+        existing_partner_ids = set(channel.channel_member_ids.mapped("partner_id").ids)
+        existing_guest_ids = set(channel.channel_member_ids.mapped("guest_id").ids)
+        missing_partners = [pid for pid in partner_ids if pid not in existing_partner_ids]
+        missing_guests = [gid for gid in guest_ids if gid not in existing_guest_ids]
+        if not missing_partners and not missing_guests:
+            return
+        channel.sudo().add_members(
+            partner_ids=missing_partners,
+            guest_ids=missing_guests,
+            post_joined_message=False,
+        )
 
 
     def _apply_channel_metadata(self, channel, dto):

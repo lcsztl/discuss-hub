@@ -117,9 +117,11 @@ class MailGateway(models.Model):
         self.ensure_one()
         users = self.member_ids
         group = self.access_group_id or self._ensure_access_group()
+        if not users and group:
+            users = group.users
         if group:
             users = users.filtered(lambda user: group in user.groups_id)
-        return users
+        return users.filtered(lambda user: user.active and user.partner_id and not user._is_public())
 
     def _apply_outgoing_signature(self, author_name, body):
         self.ensure_one()

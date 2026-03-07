@@ -3,7 +3,7 @@
 {
     "name": "Mail Gateway WhatsApp Common",
     "summary": "Shared DTO and service helpers for WhatsApp gateways",
-    "version": "18.0.1.1.3",
+    "version": "18.0.1.1.4",
     "license": "AGPL-3",
     "author": "Soloz Technologies",
     "website": "https://github.com/lcsztl/discuss-hub",
