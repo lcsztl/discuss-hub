@@ -3,7 +3,7 @@
 {
     "name": "Mail Discuss Hub Gateway",
     "summary": "Discuss UI helpers for gateway channels",
-    "version": "18.0.1.0.2",
+    "version": "18.0.1.0.4",
     "license": "AGPL-3",
     "author": "Soloz Technologies",
     "website": "https://github.com/lcsztl/discuss-hub",
@@ -30,6 +30,7 @@
             "mail_discuss_hub_gateway/static/src/js/gateway_sidebar_send_message_action.esm.js",
             "mail_discuss_hub_gateway/static/src/js/gateway_instance_sidebar.esm.js",
             "mail_discuss_hub_gateway/static/src/js/gateway_sidebar_filter_provider.esm.js",
+            "mail_discuss_hub_gateway/static/src/js/channel_member_list_patch.esm.js",
             "mail_discuss_hub_gateway/static/src/js/message_patch.esm.js",
             "mail_discuss_hub_gateway/static/src/js/thread_actions.esm.js",
             "mail_discuss_hub_gateway/static/src/xml/contact_sidebar_panel.xml",

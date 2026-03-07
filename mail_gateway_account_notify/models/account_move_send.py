@@ -36,6 +36,7 @@ class AccountMoveSend(models.AbstractModel):
         gateway,
         destination,
         body_text,
+        attachment_ids=None,
         attachments=None,
         company_id=None,
         author_user=None,
@@ -45,6 +46,7 @@ class AccountMoveSend(models.AbstractModel):
             gateway=gateway,
             destination=destination,
             body_text=body_text,
+            attachment_ids=attachment_ids,
             attachments=attachments,
             company_id=company_id,
             author_user=author_user,
@@ -307,7 +309,6 @@ class AccountMoveSend(models.AbstractModel):
             except (TypeError, ValueError):
                 continue
         attachments = self.env["ir.attachment"].browse(attachment_ids).exists()
-        attachment_payload = self._prepare_gateway_attachments_payload(attachments)
 
         author_user, author_partner = self._resolve_gateway_author(
             gateway,
@@ -321,7 +322,7 @@ class AccountMoveSend(models.AbstractModel):
             gateway=gateway,
             destination=destination,
             body_text=job.get("body_text") or "",
-            attachments=attachment_payload,
+            attachment_ids=attachments,
             company_id=company,
             author_user=author_user,
             author_partner=author_partner,
@@ -356,7 +357,9 @@ class AccountMoveSend(models.AbstractModel):
             gateway = self._get_move_gateway(move, move_data)
             destination = self._get_move_gateway_destination(move, move_data)
             body = self._get_gateway_body(move, move_data)
-            attachments = self._get_gateway_attachments(move, move_data)
+            attachment_ids = self.env["ir.attachment"].browse(
+                self._collect_gateway_attachment_ids(move, move_data)
+            ).exists()
 
             author_user, author_partner = self._resolve_gateway_author(
                 gateway,
@@ -368,7 +371,7 @@ class AccountMoveSend(models.AbstractModel):
                 gateway=gateway,
                 destination=destination,
                 body_text=body,
-                attachments=attachments,
+                attachment_ids=attachment_ids,
                 company_id=move.company_id,
                 author_user=author_user,
                 author_partner=author_partner,

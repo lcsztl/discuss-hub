@@ -50,11 +50,6 @@ class MailGatewaySendMessageWizard(models.TransientModel):
                 or wizard.to
             )
 
-    def _prepare_attachments_payload(self):
-        return self._get_gateway_dispatch_service()._prepare_ir_attachments_payload(
-            self.attachment_ids
-        )
-
     def action_send(self):
         self.ensure_one()
         gateway = self.gateway_id
@@ -75,14 +70,12 @@ class MailGatewaySendMessageWizard(models.TransientModel):
             gateway=gateway,
             destination=to_value,
             body_text=self.body,
-            attachments=self._prepare_attachments_payload(),
+            attachment_ids=self.attachment_ids,
             company_id=gateway.company_id,
             author_user=gateway.webhook_user_id or self.env.user,
             author_partner=author_partner,
         )
 
-        # Avoid leaving temporary wizard attachments around.
-        if self.attachment_ids:
-            self.attachment_ids.unlink()
-
+        # Temporary uploads are transferred to the created mail.message by the
+        # dispatch service, so they must not be unlinked here.
         return {"type": "ir.actions.act_window_close"}

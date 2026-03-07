@@ -6,7 +6,7 @@ import re
 from markupsafe import Markup
 from psycopg2 import IntegrityError
 
-from odoo import _, models
+from odoo import _, api, models
 from odoo.exceptions import ValidationError
 from odoo.tools import html_escape, html2plaintext
 
@@ -216,6 +216,54 @@ class MailGatewayDispatchService(models.AbstractModel):
             payload.append((attachment.name or "attachment", raw, info))
         return payload
 
+    @api.model
+    def _normalize_attachment_records(self, attachment_ids):
+        attachment_model = self.env["ir.attachment"].sudo()
+        if not attachment_ids:
+            return attachment_model.browse()
+        if isinstance(attachment_ids, int):
+            return attachment_model.browse([attachment_ids]).exists()
+        if isinstance(attachment_ids, models.BaseModel):
+            if attachment_ids._name != "ir.attachment":
+                return attachment_model.browse()
+            return attachment_ids.sudo().exists()
+
+        normalized_ids = []
+        for attachment_id in attachment_ids:
+            try:
+                normalized_ids.append(int(attachment_id))
+            except (TypeError, ValueError):
+                continue
+        return attachment_model.browse(normalized_ids).exists()
+
+    @api.model
+    def _is_transferable_attachment(self, attachment):
+        model_name = (attachment.res_model or "").strip()
+        if not model_name or not attachment.res_id:
+            return True
+        if model_name not in self.env:
+            return False
+        return bool(getattr(self.env[model_name], "_transient", False))
+
+    @api.model
+    def _transfer_linked_attachments_to_message(self, message, attachment_ids):
+        if not message:
+            return self.env["ir.attachment"].browse()
+        attachments = self._normalize_attachment_records(attachment_ids)
+        transferable = attachments.filtered(
+            lambda attachment: self._is_transferable_attachment(attachment)
+        )
+        if transferable:
+            # Persist wizard/composer uploads on the posted message instead of
+            # leaving them attached to a transient owner record.
+            transferable.sudo().write(
+                {
+                    "res_model": message._name,
+                    "res_id": message.id,
+                }
+            )
+        return transferable
+
     def _force_plain_message_body(self, message, body_text):
         if not message:
             return
@@ -231,6 +279,7 @@ class MailGatewayDispatchService(models.AbstractModel):
         destination,
         body_text=None,
         body_html=None,
+        attachment_ids=None,
         attachments=None,
         company_id=None,
         author_user=None,
@@ -254,7 +303,8 @@ class MailGatewayDispatchService(models.AbstractModel):
 
         source_body = body_text if body_text is not None else body_html
         normalized_body = self._to_plain_text(source_body)
-        if not normalized_body and not attachments:
+        linked_attachments = self._normalize_attachment_records(attachment_ids)
+        if not normalized_body and not attachments and not linked_attachments:
             raise ValidationError(
                 _("Message body or at least one attachment is required.")
             )
@@ -264,10 +314,12 @@ class MailGatewayDispatchService(models.AbstractModel):
         ).message_post(
             author_id=author_partner.id if author_partner else False,
             body=normalized_body or False,
+            attachment_ids=linked_attachments.ids,
             attachments=attachments or [],
             message_type="comment",
             subtype_xmlid="mail.mt_comment",
         )
+        self._transfer_linked_attachments_to_message(message, linked_attachments)
         self._force_plain_message_body(message, normalized_body)
         return {
             "channel_id": channel.id,
@@ -282,6 +334,7 @@ class MailGatewayDispatchService(models.AbstractModel):
         gateway,
         destination,
         body_text,
+        attachment_ids=None,
         attachments=None,
         company_id=None,
         author_user=None,
@@ -291,6 +344,7 @@ class MailGatewayDispatchService(models.AbstractModel):
             gateway=gateway,
             destination=destination,
             body_text=body_text,
+            attachment_ids=attachment_ids,
             attachments=attachments,
             company_id=company_id,
             author_user=author_user,
