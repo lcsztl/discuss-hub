@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="mail_gateway_llm_run_view_tree_devtools_llm" model="ir.ui.view">
+        <field name="name">mail.gateway.llm.run.tree.devtools.llm</field>
+        <field name="model">mail.gateway.llm.run</field>
+        <field name="inherit_id" ref="mail_gateway_llm.mail_gateway_llm_run_view_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="inside">
+                <field name="llm_trace_turn_count" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="mail_gateway_llm_run_view_form_devtools_llm" model="ir.ui.view">
+        <field name="name">mail.gateway.llm.run.form.devtools.llm</field>
+        <field name="model">mail.gateway.llm.run</field>
+        <field name="inherit_id" ref="mail_gateway_llm.mail_gateway_llm_run_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="LLM Trace" invisible="not llm_trace_payload">
+                    <group>
+                        <field name="llm_trace_enabled" invisible="1"/>
+                        <field name="llm_trace_turn_count" readonly="1"/>
+                    </group>
+                    <field
+                        name="llm_trace_payload"
+                        readonly="1"
+                        nolabel="1"
+                        widget="text"
+                    />
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="mail_gateway_llm_run_view_search_devtools_llm" model="ir.ui.view">
+        <field name="name">mail.gateway.llm.run.search.devtools.llm</field>
+        <field name="model">mail.gateway.llm.run</field>
+        <field name="inherit_id" ref="mail_gateway_llm.mail_gateway_llm_run_view_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <filter
+                    name="has_llm_trace"
+                    string="Has LLM Trace"
+                    domain="[('llm_trace_payload', '!=', False)]"
+                />
+            </xpath>
+        </field>
+    </record>
+
+    <menuitem
+        id="mail_discuss_hub_gateway_devtools_llm_menu_llm_runs"
+        name="LLM Runs"
+        parent="mail_discuss_hub_gateway_devtools.mail_discuss_hub_gateway_devtools_menu_messages"
+        action="mail_gateway_llm.mail_gateway_llm_run_action"
+        sequence="25"
+    />
+</odoo>

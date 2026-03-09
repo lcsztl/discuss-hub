@@ -120,10 +120,9 @@ class MailGateway(models.Model):
         self.update_webhook()
 
     def _default_webhook_event_ids(self):
-        codes = ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"]
-        return self.env["mail.gateway.whatsapp_evolution_api.webhook_event"].search(
-            [("code", "in", codes)]
-        ).ids
+        return self.env[
+            "mail.gateway.whatsapp_evolution_api.webhook_event"
+        ].search([]).ids
 
     def action_select_all_webhook_events(self):
         events = self.env["mail.gateway.whatsapp_evolution_api.webhook_event"].search([])

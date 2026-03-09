@@ -1,15 +1,21 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 import logging
+import re
 import threading
 from datetime import timedelta
 
+import emoji
 from psycopg2 import IntegrityError
 
 from odoo import SUPERUSER_ID, _, api, fields, models
 from odoo.modules.registry import Registry
 
 _logger = logging.getLogger(__name__)
+_BROKEN_EMOJI_SHORTCODE_RE = re.compile(
+    r":([a-z0-9_+-]+(?:<em>[a-z0-9_+-]+</em>[a-z0-9_+-]*)*):",
+    flags=re.IGNORECASE,
+)
 
 
 class MailGatewayLLMRun(models.Model):
@@ -186,19 +192,46 @@ class MailGatewayLLMRun(models.Model):
             return True
 
         dbname = self.env.cr.dbname
-        context = dict(self.env.context or {})
+        context = self._get_processing_context()
 
         @self.env.cr.postcommit.add
         def _process_gateway_llm_runs_after_commit():
-            registry = Registry(dbname)
-            with registry.cursor() as cr:
-                env = api.Environment(cr, SUPERUSER_ID, context)
-                env["mail.gateway.llm.run"]._process_runs(
-                    run_ids=run_ids,
-                    limit=len(run_ids),
+            try:
+                registry = Registry(dbname)
+                with registry.cursor() as cr:
+                    env = api.Environment(cr, SUPERUSER_ID, context)
+                    env["mail.gateway.llm.run"]._process_runs(
+                        run_ids=run_ids,
+                        limit=len(run_ids),
+                    )
+            except Exception:
+                _logger.exception(
+                    "Post-commit processing failed for gateway LLM runs %s",
+                    run_ids,
                 )
 
         return True
+
+    @api.model
+    def _get_processing_context(self):
+        """Drop transient webhook flags before moving work to post-commit.
+
+        Inbound gateway requests inject context keys such as
+        ``no_gateway_notification`` and ``mail_gateway_hook_payload`` so the
+        original channel message can be observed by hooks. Reusing that context
+        in async processing would make the bot's own channel posts look like a
+        fresh inbound gateway message, creating an infinite reply loop.
+        """
+        context = dict(self.env.context or {})
+        for key in (
+            "guest",
+            "mail_gateway_hook_payload",
+            "mail_gateway_skip_inbound_hooks",
+            "mail_gateway_skip_outbound_hooks",
+            "no_gateway_notification",
+        ):
+            context.pop(key, None)
+        return context
 
     @api.model
     def _claim_pending_runs(self, run_ids=None, limit=20):
@@ -242,17 +275,46 @@ class MailGatewayLLMRun(models.Model):
 
     @api.model
     def _process_runs(self, run_ids=None, limit=20):
-        runs = self._claim_pending_runs(run_ids=run_ids, limit=limit)
-        for run in runs:
-            with self.env.cr.savepoint():
-                try:
-                    run._process_one()
-                except Exception as exc:
-                    _logger.exception("Gateway LLM run %s failed", run.id)
-                    run._mark_retry_or_error(str(exc))
-            if not getattr(threading.current_thread(), "testing", False):
-                self.env.cr.commit()
-        return len(runs)
+        if limit <= 0:
+            return 0
+
+        processed = 0
+        remaining_run_ids = list(dict.fromkeys(run_ids or []))
+
+        while processed < limit:
+            claim_run_ids = remaining_run_ids or None
+            runs = self._claim_pending_runs(run_ids=claim_run_ids, limit=1)
+            if not runs:
+                break
+
+            run_id = runs.id
+            run = self.browse(run_id)
+            try:
+                run._process_one()
+            except Exception as exc:
+                _logger.exception("Gateway LLM run %s failed", run_id)
+                self.env.cr.rollback()
+                self._mark_failed_run(run_id, str(exc))
+            finally:
+                if not getattr(threading.current_thread(), "testing", False):
+                    self.env.cr.commit()
+
+            processed += 1
+            if remaining_run_ids:
+                remaining_run_ids.remove(run_id)
+                if not remaining_run_ids:
+                    break
+
+        return processed
+
+    @api.model
+    def _mark_failed_run(self, run_id, reason):
+        fresh_env = api.Environment(self.env.cr, self.env.uid, self.env.context)
+        run = fresh_env[self._name].browse(run_id).exists()
+        if not run:
+            return False
+        run._mark_retry_or_error(reason)
+        return True
 
     def _process_one(self):
         self.ensure_one()
@@ -294,14 +356,18 @@ class MailGatewayLLMRun(models.Model):
             self._mark_done(update_vals)
             return
 
-        previous_assistant = self._get_latest_assistant_message(thread)
-        for _event in thread.generate():
+        traced_thread = thread.with_context(mail_gateway_llm_run_id=self.id)
+        previous_assistant = self._get_latest_assistant_message(traced_thread)
+        for _event in traced_thread.generate():
             pass
-        assistant_message = self._find_new_assistant_message(thread, previous_assistant)
+        assistant_message = self._find_new_assistant_message(
+            traced_thread, previous_assistant
+        )
         if not assistant_message:
             self._mark_skipped(_("No assistant response was generated."), update_vals)
             return
 
+        assistant_message = self._normalize_assistant_message_body(assistant_message)
         update_vals["assistant_message_id"] = assistant_message.id
         if assistant_message.is_error:
             self._mark_error(_("Assistant generation failed."), update_vals)
@@ -388,6 +454,23 @@ class MailGatewayLLMRun(models.Model):
             domain.append(("id", ">", previous_assistant.id))
         return self.env["mail.message"].search(domain, order="id desc", limit=1)
 
+    def _normalize_assistant_message_body(self, assistant_message):
+        self.ensure_one()
+        body = str(assistant_message.body or "")
+        if not body or ":" not in body:
+            return assistant_message
+
+        def _replace_shortcode(match):
+            alias = match.group(0)
+            restored_alias = re.sub(r"<em>([^<]+)</em>", r"_\1_", alias)
+            emojized = emoji.emojize(restored_alias, language="alias")
+            return emojized if emojized != restored_alias else alias
+
+        normalized_body = _BROKEN_EMOJI_SHORTCODE_RE.sub(_replace_shortcode, body)
+        if normalized_body != body:
+            assistant_message.sudo().write({"body": normalized_body})
+        return assistant_message
+
     def _publish_assistant_message(self, assistant_message):
         self.ensure_one()
         body = (assistant_message.body or "").strip()
@@ -395,7 +478,12 @@ class MailGatewayLLMRun(models.Model):
         if not body and not attachment_ids:
             return False
 
-        channel = self.channel_id.with_context(mail_gateway_skip_outbound_hooks=True)
+        channel = self.channel_id.with_context(
+            mail_gateway_hook_payload=False,
+            mail_gateway_skip_inbound_hooks=True,
+            mail_gateway_skip_outbound_hooks=True,
+            no_gateway_notification=False,
+        )
         send_user = self.gateway_id.webhook_user_id or self.env.user
         send_partner = send_user.partner_id if send_user else False
         return channel.with_user(send_user).message_post(

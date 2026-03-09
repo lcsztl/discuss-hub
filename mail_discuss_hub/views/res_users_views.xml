@@ -62,7 +62,7 @@
         <field name="inherit_id" ref="base.view_users_form"/>
         <field name="arch" type="xml">
             <xpath expr="//page[@name='access_rights']" position="inside">
-                <group>
+                <group string="Discuss Hub">
                     <field name="discuss_role" invisible="share"/>
                 </group>
             </xpath>

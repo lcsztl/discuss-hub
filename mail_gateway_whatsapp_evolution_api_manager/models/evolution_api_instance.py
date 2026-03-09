@@ -143,6 +143,30 @@ class EvolutionApiInstance(models.Model):
         )
         return action
 
+    def _action_open_gateway_inbox(self, gateway):
+        if "discuss.hub.inbox" not in self.env:
+            return self._action_open_gateway(gateway)
+        inbox_model = self.env["discuss.hub.inbox"].sudo()
+        if "gateway_id" not in inbox_model._fields:
+            return self._action_open_gateway(gateway)
+        inbox = inbox_model.search([("gateway_id", "=", gateway.id)], limit=1)
+        if not inbox:
+            inbox = inbox_model.create(
+                {
+                    "inbox_type": "gateway",
+                    "gateway_id": gateway.id,
+                    "name": gateway.name,
+                }
+            )
+        return {
+            "type": "ir.actions.act_window",
+            "res_model": "discuss.hub.inbox",
+            "res_id": inbox.id,
+            "view_mode": "form",
+            "views": [(False, "form")],
+            "target": "current",
+        }
+
     def action_open_gateway(self):
         self.ensure_one()
         if not self.gateway_id:
@@ -315,7 +339,7 @@ class EvolutionApiInstance(models.Model):
         if existing:
             if not self.gateway_id:
                 self.gateway_id = existing.id
-            return self._action_open_gateway(existing)
+            return self._action_open_gateway_inbox(existing)
         if not self.server_id:
             raise UserError(_("Evolution API server is required."))
         token = self.api_key or self.server_id.api_key
@@ -330,7 +354,7 @@ class EvolutionApiInstance(models.Model):
         gateway = self.env["mail.gateway"].create(self._gateway_values())
         gateway.set_webhook()
         self.gateway_id = gateway.id
-        return self._action_open_gateway(gateway)
+        return self._action_open_gateway_inbox(gateway)
 
     def action_select_all_webhook_events(self):
         self.ensure_one()

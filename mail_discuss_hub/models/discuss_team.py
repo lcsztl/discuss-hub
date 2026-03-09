@@ -76,14 +76,20 @@ class MailDiscussTeam(models.Model):
         self.ensure_one()
         return f"Discuss Team: {self.name}"
 
-    def _ensure_access_group(self):
-        self.ensure_one()
-        if self.access_group_id:
-            return self.access_group_id
-        vals = {"name": self._get_access_group_name()}
-        category = self.env.ref(
+    @api.model
+    def _get_access_group_category(self):
+        return self.env.ref(
             "mail_discuss_hub.module_category_discuss_hub", raise_if_not_found=False
         )
+
+    def _ensure_access_group(self):
+        self.ensure_one()
+        category = self._get_access_group_category()
+        if self.access_group_id:
+            if category and self.access_group_id.category_id != category:
+                self.access_group_id.sudo().write({"category_id": category.id})
+            return self.access_group_id
+        vals = {"name": self._get_access_group_name()}
         if category:
             vals["category_id"] = category.id
         group = self.env["res.groups"].sudo().create(vals)
@@ -93,6 +99,7 @@ class MailDiscussTeam(models.Model):
         return group
 
     def _sync_access_group(self):
+        category = self._get_access_group_category()
         for team in self:
             group = team._ensure_access_group()
             desired_user_ids = team.member_ids.ids
@@ -100,7 +107,24 @@ class MailDiscussTeam(models.Model):
             desired_name = team._get_access_group_name()
             if group.name != desired_name:
                 updates["name"] = desired_name
+            if category and group.category_id != category:
+                updates["category_id"] = category.id
             group.sudo().with_context(mail_discuss_hub_skip_group_sync=True).write(updates)
+
+    @api.model
+    def _backfill_access_group_categories(self):
+        category = self._get_access_group_category()
+        self.sudo().search([("access_group_id", "!=", False)])._sync_access_group()
+        if not category:
+            return
+        legacy_groups = self.env["res.groups"].sudo().search(
+            [
+                ("name", "=like", "Discuss Team:%"),
+                ("category_id", "!=", category.id),
+            ]
+        )
+        if legacy_groups:
+            legacy_groups.write({"category_id": category.id})
 
     def _sync_members_from_access_group(self):
         for team in self:

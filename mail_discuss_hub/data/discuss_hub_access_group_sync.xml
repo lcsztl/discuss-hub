@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <function
+        model="mail.discuss.team"
+        name="_backfill_access_group_categories"
+    />
+</odoo>

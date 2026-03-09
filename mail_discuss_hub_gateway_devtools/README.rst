@@ -27,6 +27,8 @@ Principais funcionalidades
   durante testes controlados.
 - Script utilitario ``scripts/replay_webhook_logs.py`` para reprocessar logs via
   ``odoo-bin shell`` configurando filtros por variaveis de ambiente.
+- Recursos de tracing de LLM ficam em um addon opcional separado,
+  ``mail_discuss_hub_gateway_devtools_llm``.
 
 Uso
 ---

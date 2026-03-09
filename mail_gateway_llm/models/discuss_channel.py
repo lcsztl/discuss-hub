@@ -42,6 +42,28 @@ class DiscussChannel(models.Model):
         self.ensure_one()
         return self.llm_assistant_id.exists()
 
+    def _sync_gateway_llm_thread_assistant(self, thread, assistant):
+        self.ensure_one()
+        if not thread or not assistant:
+            return thread
+
+        assistant_tools = assistant.tool_ids
+        thread_tools = thread.tool_ids
+        needs_assistant_sync = (
+            thread.assistant_id != assistant
+            or thread.provider_id != assistant.provider_id
+            or thread.model_id != assistant.model_id
+            or thread.prompt_id != assistant.prompt_id
+            or set(thread_tools.ids) != set(assistant_tools.ids)
+        )
+        if not needs_assistant_sync:
+            return thread
+
+        thread.sudo().set_assistant(assistant.id)
+        if not assistant.prompt_id and thread.prompt_id:
+            thread.sudo().write({"prompt_id": False})
+        return thread
+
     def _ensure_gateway_llm_thread(self, assistant=None):
         self.ensure_one()
 
@@ -65,9 +87,9 @@ class DiscussChannel(models.Model):
                     "res_id": self.id,
                     "provider_id": assistant.provider_id.id,
                     "model_id": assistant.model_id.id,
-                    "assistant_id": assistant.id,
                 }
             )
+            thread = self._sync_gateway_llm_thread_assistant(thread, assistant)
             self.sudo().write({"llm_thread_id": thread.id})
             return thread
 
@@ -80,8 +102,7 @@ class DiscussChannel(models.Model):
             update_vals["model_id"] = assistant.model_id.id
         if update_vals:
             thread.sudo().write(update_vals)
-        if thread.assistant_id != assistant:
-            thread.sudo().set_assistant(assistant.id)
+        thread = self._sync_gateway_llm_thread_assistant(thread, assistant)
         if self.llm_thread_id != thread:
             self.sudo().write({"llm_thread_id": thread.id})
         return thread

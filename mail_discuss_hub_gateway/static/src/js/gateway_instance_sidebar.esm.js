@@ -1,8 +1,12 @@
 import {DiscussAppCategory} from "@mail/core/public_web/discuss_app_category_model";
 import {Thread} from "@mail/core/common/thread_model";
-import {DiscussSidebarChannel} from "@mail/discuss/core/public_web/discuss_sidebar_categories";
+import {
+    DiscussSidebarCategories,
+    DiscussSidebarChannel,
+} from "@mail/discuss/core/public_web/discuss_sidebar_categories";
 import {assignIn, compareDatetime} from "@mail/utils/common/misc";
 import {_t} from "@web/core/l10n/translation";
+import {rpc} from "@web/core/network/rpc";
 import {useService} from "@web/core/utils/hooks";
 import {patch} from "@web/core/utils/patch";
 
@@ -25,21 +29,21 @@ function getGatewayInfo(thread) {
     return { id: gatewayId, name: gatewayName };
 }
 
-function getGatewayCategory(thread) {
-    const gatewayInfo = getGatewayInfo(thread);
-    if (!gatewayInfo) {
+function ensureGatewayCategory(store, gatewayInfo) {
+    if (!store || !store.DiscussAppCategory || !gatewayInfo?.id) {
         return null;
     }
-    const store = thread.store;
-    if (!store || !store.DiscussAppCategory) {
+    const normalizedId = Number.parseInt(gatewayInfo.id, 10);
+    if (!normalizedId) {
         return null;
     }
-    const categoryId = `${GATEWAY_CATEGORY_PREFIX}${gatewayInfo.id}`;
+    const categoryId = `${GATEWAY_CATEGORY_PREFIX}${normalizedId}`;
     let category = store.DiscussAppCategory.get({id: categoryId});
     const fallbackName = gatewayInfo.name || _t("Gateway");
     if (!category) {
         category = store.DiscussAppCategory.insert({
             id: categoryId,
+            app: store.discuss,
             name: fallbackName,
             extraClass: "o-mail-DiscussSidebarCategory-gateway",
             hideWhenEmpty: false,
@@ -51,6 +55,38 @@ function getGatewayCategory(thread) {
         category.update({name: gatewayInfo.name});
     }
     return category;
+}
+
+function getGatewayCategory(thread) {
+    const gatewayInfo = getGatewayInfo(thread);
+    if (!gatewayInfo) {
+        return null;
+    }
+    const store = thread.store;
+    if (!store || !store.DiscussAppCategory) {
+        return null;
+    }
+    return ensureGatewayCategory(store, gatewayInfo);
+}
+
+async function loadGatewayCategories(store) {
+    if (!store?.DiscussAppCategory || store.discuss?._gatewaySidebarLoaded) {
+        return;
+    }
+    store.discuss._gatewaySidebarLoaded = true;
+    try {
+        const gateways = await rpc("/discuss_hub/gateway/sidebar", {});
+        if (!Array.isArray(gateways)) {
+            return;
+        }
+        for (const gatewayInfo of gateways) {
+            ensureGatewayCategory(store, gatewayInfo);
+        }
+    } catch {
+        if (store.discuss) {
+            store.discuss._gatewaySidebarLoaded = false;
+        }
+    }
 }
 
 function requestGatewayCategoryCompute(thread) {
@@ -69,6 +105,13 @@ patch(Thread, {
             requestGatewayCategoryCompute(thread);
         }
         return thread;
+    },
+});
+
+patch(DiscussSidebarCategories.prototype, {
+    setup() {
+        super.setup(...arguments);
+        Promise.resolve().then(() => loadGatewayCategories(this.store));
     },
 });
 

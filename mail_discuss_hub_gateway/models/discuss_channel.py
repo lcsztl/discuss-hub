@@ -1,9 +1,11 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+from psycopg2 import IntegrityError
 from markupsafe import Markup
 
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
+from odoo.tools import mute_logger
 
 
 class DiscussChannel(models.Model):
@@ -64,6 +66,26 @@ class DiscussChannel(models.Model):
                 group = gateway._ensure_access_group() if gateway else False
                 vals["group_public_id"] = group.id if group else False
         return super().write(vals)
+
+    def _find_or_create_member_for_self(self):
+        self.ensure_one()
+        if self.channel_type != "gateway":
+            return super()._find_or_create_member_for_self()
+
+        member_domain = [("channel_id", "=", self.id), ("is_self", "=", True)]
+        member = self.env["discuss.channel.member"].search(member_domain, limit=1)
+        if member:
+            return member
+
+        try:
+            # Typing/join requests can race on first access to a visible gateway channel.
+            with mute_logger("odoo.sql_db"), self.env.cr.savepoint():
+                return super()._find_or_create_member_for_self()
+        except IntegrityError:
+            member = self.env["discuss.channel.member"].search(member_domain, limit=1)
+            if member:
+                return member
+            raise
 
     def action_archive(self):
         to_log = self.filtered(

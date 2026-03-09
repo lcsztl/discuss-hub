@@ -27,6 +27,8 @@ class MailMessage(models.Model):
     def _chatwoot_try_fill_from_log(self, updated_vals=None):
         if self.env.context.get("chatwoot_skip_parse"):
             return
+        if "gateway_webhook_log_id" not in self._fields:
+            return
         if updated_vals and "gateway_webhook_log_id" not in updated_vals:
             if not any(
                 field in updated_vals

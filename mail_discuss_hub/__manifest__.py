@@ -14,6 +14,7 @@
     "data": [
         "data/discuss_hub_groups.xml",
         "data/discuss_hub_roles.xml",
+        "data/discuss_hub_access_group_sync.xml",
         "security/ir.model.access.csv",
         "views/discuss_hub_inbox_views.xml",
         "views/res_config_settings_views.xml",
