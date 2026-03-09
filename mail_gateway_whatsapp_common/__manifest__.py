@@ -7,7 +7,7 @@
     "license": "AGPL-3",
     "author": "Soloz Technologies",
     "website": "https://github.com/lcsztl/discuss-hub",
-    "depends": ["mail_gateway"],
+    "depends": ["mail_gateway", "mail_gateway_base"],
     "data": [
         "security/ir.model.access.csv",
         "views/mail_guest_views.xml",

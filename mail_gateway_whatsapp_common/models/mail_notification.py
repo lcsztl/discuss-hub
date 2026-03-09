@@ -25,13 +25,14 @@ class MailNotification(models.Model):
         if common_records:
             for record in common_records:
                 gateway = record.gateway_channel_id.gateway_id
-                common._send_outbound(
+                result = common._send_outbound(
                     gateway,
                     record,
                     auto_commit=auto_commit,
                     raise_exception=raise_exception,
                     parse_mode=parse_mode,
                 )
+                record._dispatch_gateway_outbound_success(result=result)
         remaining = self - common_records
         if remaining:
             return super(MailNotification, remaining).send_gateway(

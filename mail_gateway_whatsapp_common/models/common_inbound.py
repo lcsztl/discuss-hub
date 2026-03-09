@@ -135,6 +135,15 @@ class MailGatewayWhatsappCommonInbound:
 
         ctx = dict(self.env.context or {})
         ctx["no_gateway_notification"] = True
+        ctx["mail_gateway_hook_payload"] = {
+            "provider": dto.provider,
+            "gateway_type": gateway.gateway_type,
+            "event": dto.event,
+            "from_me": bool(dto.from_me),
+            "message_id": message_id,
+            "chat_id": chat_id,
+            "instance": dto.instance,
+        }
         post_channel = channel.with_context(**ctx)
         author_id = False
         if author._name == "mail.guest":

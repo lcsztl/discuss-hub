@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="mail_gateway_form_view_llm" model="ir.ui.view">
+        <field name="name">mail.gateway.form.llm</field>
+        <field name="model">mail.gateway</field>
+        <field name="inherit_id" ref="mail_gateway.mail_gateway_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button
+                    type="object"
+                    name="action_view_llm_runs"
+                    class="oe_stat_button"
+                    icon="fa-robot"
+                >
+                    <field name="llm_run_count" widget="statinfo" string="AI Runs"/>
+                </button>
+            </xpath>
+            <xpath expr="//field[@name='gateway_type']" position="after">
+                <field name="llm_mode"/>
+                <field
+                    name="llm_assistant_id"
+                    options="{'no_create': True}"
+                    invisible="llm_mode == 'off'"
+                />
+            </xpath>
+        </field>
+    </record>
+</odoo>
