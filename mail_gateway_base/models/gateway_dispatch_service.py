@@ -133,14 +133,16 @@ class MailGatewayDispatchService(models.AbstractModel):
         if not gateway:
             raise ValidationError(_("Gateway is required."))
         dispatcher = False
+        dispatcher_available = False
         model_name = f"mail.gateway.{gateway.gateway_type}"
         if model_name in self.env:
+            dispatcher_available = True
             dispatcher = self.env[model_name].sudo()
             if company_id:
                 dispatcher = dispatcher.with_company(company_id)
         member_dispatcher = dispatcher
         if (
-            dispatcher
+            dispatcher_available
             and getattr(dispatcher, "_uses_gateway_common", False)
             and "mail.gateway.whatsapp.common" in self.env
         ):
@@ -165,7 +167,7 @@ class MailGatewayDispatchService(models.AbstractModel):
             raise ValidationError(_("Recipient destination is invalid."))
 
         token = chat_tokens[0]
-        if not dispatcher:
+        if not dispatcher_available:
             raise ValidationError(
                 _("Gateway type '%s' is not supported.") % (gateway.gateway_type or "")
             )
