@@ -1,7 +1,7 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 from odoo import _, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 
 
 class DiscussChannel(models.Model):
@@ -37,6 +37,48 @@ class DiscussChannel(models.Model):
         counts = {item["channel_id"][0]: item["channel_id_count"] for item in grouped}
         for channel in self:
             channel.llm_run_count = counts.get(channel.id, 0)
+
+    def _channel_basic_info(self):
+        info = super()._channel_basic_info()
+        info.update(
+            {
+                "llm_state": self.llm_state,
+                "llm_assistant_id": self.llm_assistant_id.id if self.llm_assistant_id else False,
+                "llm_mode": self.gateway_id.llm_mode if self.gateway_id else False,
+            }
+        )
+        return info
+
+    def _check_can_manage_llm_state(self):
+        self.ensure_one()
+        if not self.env.user._is_internal():
+            raise AccessError(_("Only internal users can manage the AI auto-service."))
+
+        channel = self.with_user(self.env.user)
+        channel.check_access("read")
+
+        if channel.channel_type != "gateway" or not channel.gateway_id:
+            raise AccessError(_("AI auto-service can only be managed on gateway channels."))
+        if not channel.llm_assistant_id or channel.gateway_id.llm_mode == "off":
+            raise UserError(_("Configure an active AI assistant on the gateway first."))
+
+    def _set_llm_state(self, target_state):
+        self.ensure_one()
+        if target_state not in {"active", "paused"}:
+            raise UserError(_("Unsupported AI state '%s'.") % target_state)
+
+        self._check_can_manage_llm_state()
+        if self.llm_state != target_state:
+            self.sudo().write({"llm_state": target_state})
+        return {"llm_state": self.llm_state}
+
+    def action_pause_llm(self):
+        self.ensure_one()
+        return self._set_llm_state("paused")
+
+    def action_resume_llm(self):
+        self.ensure_one()
+        return self._set_llm_state("active")
 
     def _get_gateway_llm_assistant(self):
         self.ensure_one()

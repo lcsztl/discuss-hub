@@ -25,6 +25,7 @@ class MailGateway(models.Model):
         help="Assistant used for conversations routed through this gateway.",
     )
     llm_run_count = fields.Integer(compute="_compute_llm_run_count")
+    llm_binding_count = fields.Integer(compute="_compute_llm_binding_count")
 
     def _compute_llm_run_count(self):
         grouped = self.env["mail.gateway.llm.run"].read_group(
@@ -35,6 +36,16 @@ class MailGateway(models.Model):
         counts = {item["gateway_id"][0]: item["gateway_id_count"] for item in grouped}
         for gateway in self:
             gateway.llm_run_count = counts.get(gateway.id, 0)
+
+    def _compute_llm_binding_count(self):
+        grouped = self.env["mail.gateway.llm.access.binding"].read_group(
+            [("gateway_id", "in", self.ids)],
+            ["gateway_id"],
+            ["gateway_id"],
+        )
+        counts = {item["gateway_id"][0]: item["gateway_id_count"] for item in grouped}
+        for gateway in self:
+            gateway.llm_binding_count = counts.get(gateway.id, 0)
 
     def _gateway_llm_ready(self):
         self.ensure_one()
@@ -84,4 +95,14 @@ class MailGateway(models.Model):
         action["domain"] = [("gateway_id", "=", self.id)]
         action["context"] = {"default_gateway_id": self.id}
         action["name"] = _("Gateway AI Runs")
+        return action
+
+    def action_view_llm_bindings(self):
+        self.ensure_one()
+        action = self.env.ref(
+            "mail_gateway_llm.mail_gateway_llm_access_binding_action"
+        ).read()[0]
+        action["domain"] = [("gateway_id", "=", self.id)]
+        action["context"] = {"default_gateway_id": self.id}
+        action["name"] = _("Gateway AI Access Bindings")
         return action

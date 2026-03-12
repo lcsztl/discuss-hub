@@ -92,14 +92,18 @@ class ResUsers(models.Model):
             groups = self._get_discuss_team_groups()
             if groups:
                 group_ids = set(groups.ids)
+                # Team/group synchronization should not depend on the current user
+                # keeping read access to res.users while their own groups change.
+                users_for_sync = self.sudo()
                 before = {
-                    user.id: set(user.groups_id.ids) & group_ids for user in self
+                    user.id: set(user.groups_id.ids) & group_ids
+                    for user in users_for_sync
                 }
         res = super().write(vals)
         if "groups_id" in vals and groups:
             group_ids = set(groups.ids)
             changed_group_ids = set()
-            for user in self:
+            for user in self.sudo():
                 after = set(user.groups_id.ids) & group_ids
                 changed_group_ids |= before.get(user.id, set()) ^ after
             if changed_group_ids:

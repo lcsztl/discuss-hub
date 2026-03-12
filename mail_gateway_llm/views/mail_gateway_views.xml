@@ -14,6 +14,14 @@
                 >
                     <field name="llm_run_count" widget="statinfo" string="AI Runs"/>
                 </button>
+                <button
+                    type="object"
+                    name="action_view_llm_bindings"
+                    class="oe_stat_button"
+                    icon="fa-shield"
+                >
+                    <field name="llm_binding_count" widget="statinfo" string="AI Bindings"/>
+                </button>
             </xpath>
             <xpath expr="//field[@name='gateway_type']" position="after">
                 <field name="llm_mode"/>

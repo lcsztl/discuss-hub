@@ -130,6 +130,15 @@ patch(Thread.prototype, {
             }
         }
     },
+    notifyMessageToUser(message) {
+        // Accessible gateway threads shown under "Todas" can be opened without
+        // the user actually joining the conversation. In that case, suppress
+        // desktop/toast notifications and sounds for new messages.
+        if (this.channel_type === "gateway" && !this.selfMember) {
+            return;
+        }
+        return super.notifyMessageToUser(message);
+    },
     _computeDiscussAppCategory() {
         if (this.active === false) {
             return;

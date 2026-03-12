@@ -1,3 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_mail_gateway_llm_run_user,mail.gateway.llm.run user,model_mail_gateway_llm_run,base.group_user,1,0,0,0
 access_mail_gateway_llm_run_system,mail.gateway.llm.run system,model_mail_gateway_llm_run,base.group_system,1,1,1,1
+access_mail_gateway_llm_access_binding_system,mail.gateway.llm.access.binding system,model_mail_gateway_llm_access_binding,base.group_system,1,1,1,1

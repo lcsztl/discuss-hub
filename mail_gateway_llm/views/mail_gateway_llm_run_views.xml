@@ -53,7 +53,7 @@
                             <field name="assistant_body" readonly="1" widget="html"/>
                         </page>
                         <page string="Payload">
-                            <field name="payload_json" readonly="1"/>
+                            <field name="payload_pretty" readonly="1" nolabel="1" widget="text"/>
                         </page>
                         <page string="Error">
                             <field name="error_text" readonly="1"/>

@@ -60,10 +60,11 @@ class MailGatewayLLMRun(models.Model):
 
     def _devtools_store_trace_payload(self, payload):
         self.ensure_one()
+        normalized_payload = self._devtools_normalize_value(payload)
         self.sudo().write(
             {
                 "llm_trace_payload": json.dumps(
-                    payload,
+                    normalized_payload,
                     ensure_ascii=False,
                     indent=2,
                     sort_keys=True,

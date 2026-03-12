@@ -141,6 +141,8 @@ class MailGatewayWhatsappCommonUtils:
             if existing:
                 return existing
 
+        if instance or chat_id:
+            return False
         return message_model.search(base_domain, limit=1)
 
 
@@ -203,7 +205,19 @@ class MailGatewayWhatsappCommonUtils:
             if existing:
                 return existing
 
+        if dto.instance or dto.chat_id:
+            return False
         return message_model.search(base_domain, limit=1)
+
+    @staticmethod
+    def _field_needs_backfill(record, field_name):
+        if not record or field_name not in record._fields:
+            return False
+        field = record._fields[field_name]
+        current_value = getattr(record, field_name)
+        if field.type == "boolean":
+            return False
+        return current_value in (False, None, "")
 
 
     def _find_message_alias(self, gateway, message_id, chat_id=None, instance=None):

@@ -1,5 +1,6 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+import json
 import logging
 import re
 import threading
@@ -7,6 +8,7 @@ from datetime import timedelta
 
 import emoji
 from psycopg2 import IntegrityError
+from psycopg2.errors import SerializationFailure
 
 from odoo import SUPERUSER_ID, _, api, fields, models
 from odoo.modules.registry import Registry
@@ -96,6 +98,10 @@ class MailGatewayLLMRun(models.Model):
         index=True,
     )
     payload_json = fields.Json(string="Payload")
+    payload_pretty = fields.Text(
+        compute="_compute_payload_pretty",
+        readonly=True,
+    )
     attempt_count = fields.Integer(default=0)
     max_attempts = fields.Integer(default=3)
     next_attempt_at = fields.Datetime(default=fields.Datetime.now, index=True)
@@ -110,6 +116,23 @@ class MailGatewayLLMRun(models.Model):
             "A gateway message is already queued for this AI run type.",
         )
     ]
+
+    @api.depends("payload_json")
+    def _compute_payload_pretty(self):
+        for run in self:
+            payload = run.payload_json
+            if not payload:
+                run.payload_pretty = False
+                continue
+            try:
+                run.payload_pretty = json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+            except Exception:
+                run.payload_pretty = str(payload)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -292,12 +315,28 @@ class MailGatewayLLMRun(models.Model):
             try:
                 run._process_one()
             except Exception as exc:
-                _logger.exception("Gateway LLM run %s failed", run_id)
+                _logger.exception("Gateway LLM run %s failed during processing", run_id)
                 self.env.cr.rollback()
-                self._mark_failed_run(run_id, str(exc))
-            finally:
+                self._mark_failed_run(
+                    run_id,
+                    self._format_failure_reason(exc),
+                )
+            else:
                 if not getattr(threading.current_thread(), "testing", False):
-                    self.env.cr.commit()
+                    try:
+                        self.env.cr.commit()
+                    except Exception as exc:
+                        _logger.exception(
+                            "Gateway LLM run %s failed while committing", run_id
+                        )
+                        self.env.cr.rollback()
+                        self._mark_failed_run(
+                            run_id,
+                            self._format_failure_reason(exc),
+                            force_error=self._should_force_error_on_commit_failure(
+                                run, exc
+                            ),
+                        )
 
             processed += 1
             if remaining_run_ids:
@@ -308,12 +347,49 @@ class MailGatewayLLMRun(models.Model):
         return processed
 
     @api.model
-    def _mark_failed_run(self, run_id, reason):
-        fresh_env = api.Environment(self.env.cr, self.env.uid, self.env.context)
-        run = fresh_env[self._name].browse(run_id).exists()
+    def _format_failure_reason(self, exc):
+        message = str(exc).strip()
+        exc_name = exc.__class__.__name__
+        return f"{exc_name}: {message}" if message else exc_name
+
+    @api.model
+    def _should_force_error_on_commit_failure(self, run, exc):
+        run = run.exists()
         if not run:
-            return False
-        run._mark_retry_or_error(reason)
+            return True
+        if isinstance(exc, SerializationFailure):
+            return run.run_type == "inbound" and run.mode == "auto"
+        return True
+
+    @api.model
+    def _mark_failed_run(self, run_id, reason, force_error=False):
+        if getattr(threading.current_thread(), "testing", False):
+            fresh_env = api.Environment(self.env.cr, self.env.uid, self.env.context)
+            run = fresh_env[self._name].browse(run_id).exists()
+            if not run:
+                return False
+            if run.state in ("done", "skipped", "error"):
+                return True
+            if force_error:
+                run._mark_error(reason)
+            else:
+                run._mark_retry_or_error(reason)
+            return True
+
+        registry = Registry(self.env.cr.dbname)
+        with registry.cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, self.env.context)
+            run = env[self._name].browse(run_id).exists()
+            if not run:
+                return False
+            if run.state in ("done", "skipped", "error"):
+                cr.commit()
+                return True
+            if force_error:
+                run._mark_error(reason)
+            else:
+                run._mark_retry_or_error(reason)
+            cr.commit()
         return True
 
     def _process_one(self):

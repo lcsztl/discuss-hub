@@ -72,7 +72,7 @@ class MailGatewayWhatsappCommonInbound:
             for field_name, value in backfill_values.items():
                 if field_name not in existing._fields:
                     continue
-                if getattr(existing, field_name):
+                if not self._field_needs_backfill(existing, field_name):
                     continue
                 if value in (None, "", False):
                     continue
